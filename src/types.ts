@@ -61,22 +61,35 @@ export interface LogEntry {
   row?: number;
 }
 
+/** 1 เดือน = 1 แถวในแท็บ Stats (ค่า ADC/ALOS/BOR/BTR/TOI คำนวณจากช่องเหล่านี้) */
+export interface StatsRecord {
+  month: string; // yyyy-MM
+  beds: number;
+  days: number;
+  patientDays: number;
+  discharges: number;
+  note: string;
+  row?: number;
+}
+
 export interface SheetMeta {
   spreadsheetId: string;
   spreadsheetUrl: string;
   title: string;
-  gids: { beds: number; daily: number; log: number };
+  gids: { beds: number; daily: number; log: number; stats?: number };
 }
 
 export interface IcuData {
   beds: Bed[];
   daily: DailyRecord[];
   logs: LogEntry[];
+  stats: StatsRecord[];
 }
 
 export type SheetOp =
   | { type: 'upsertBed'; bed: Partial<Bed> & { bedNumber: string } }
   | { type: 'upsertDaily'; record: Partial<DailyRecord> & { date: string } }
-  | { type: 'appendLog'; entry: LogEntry };
+  | { type: 'appendLog'; entry: LogEntry }
+  | { type: 'upsertStats'; record: Omit<StatsRecord, 'row'> };
 
 export type SyncState = 'local' | 'connecting' | 'live' | 'saving' | 'offline' | 'error';

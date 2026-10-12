@@ -1,4 +1,4 @@
-import { Activity, CalendarDays, LayoutGrid, Settings2, Sheet as SheetIcon } from 'lucide-react';
+import { Activity, CalendarDays, Gauge, LayoutGrid, Settings2, Sheet as SheetIcon } from 'lucide-react';
 import { HOSPITAL } from '../lib/constants';
 import { relativeTime } from '../lib/date';
 import { useNow, type View } from '../lib/hooks';
@@ -9,6 +9,7 @@ import { cx, Dot, IconButton, Segmented } from './ui';
 const TABS: { value: View; label: string; icon: typeof Activity }[] = [
   { value: 'overview', label: 'ภาพรวม', icon: LayoutGrid },
   { value: 'indicators', label: '12 ตัวชี้วัด', icon: Activity },
+  { value: 'stats', label: 'สถิติเตียง', icon: Gauge },
   { value: 'monthly', label: 'รายเดือน', icon: CalendarDays },
 ];
 
@@ -91,7 +92,7 @@ export function TopBar({ view, onView, onSettings }: { view: View; onView: (v: V
       {/* แถบแท็บลอยด้านล่างสำหรับมือถือ (แบบ iOS) */}
       <nav
         aria-label="เมนูหลัก"
-        className="glass glass-strong fixed inset-x-0 bottom-[max(12px,env(safe-area-inset-bottom))] z-40 mx-auto flex w-[min(360px,calc(100%-24px))] items-center justify-between rounded-full p-1.5 md:hidden"
+        className="glass glass-strong fixed inset-x-0 bottom-[max(12px,env(safe-area-inset-bottom))] z-40 mx-auto flex w-[min(420px,calc(100%-24px))] items-center justify-between rounded-full p-1.5 md:hidden"
       >
         {TABS.map((t) => {
           const Icon = t.icon;
@@ -103,7 +104,7 @@ export function TopBar({ view, onView, onSettings }: { view: View; onView: (v: V
               aria-current={active ? 'page' : undefined}
               onClick={() => onView(t.value)}
               className={cx(
-                'flex h-[52px] flex-1 flex-col items-center justify-center gap-0.5 rounded-full text-[11px] font-medium transition-all duration-300 ease-[var(--ease-liquid)]',
+                'flex h-[52px] min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-full text-[10.5px] font-medium whitespace-nowrap transition-all duration-300 ease-[var(--ease-liquid)]',
                 active ? 'seg-thumb text-accent' : 'text-ink-2 active:scale-95',
               )}
             >

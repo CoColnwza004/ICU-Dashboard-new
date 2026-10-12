@@ -3,7 +3,7 @@ import type { Acuity, BedStatus, DailyKey, DeviceKey, LogEvent } from '../types'
 export const HOSPITAL = 'โรงพยาบาลปากเกร็ด';
 export const UNIT = 'หอผู้ป่วยวิกฤต ICU';
 
-export const DEFAULT_BEDS = ['ICU-01', 'ICU-02', 'ICU-03', 'ICU-04'];
+export const DEFAULT_BEDS = ['ICU-01', 'ICU-02', 'ICU-03', 'ICU-04', 'ICU-05', 'ICU-06', 'ICU-07', 'ICU-08'];
 
 export interface DeviceDef {
   key: DeviceKey;
@@ -71,7 +71,18 @@ export const ACUITY_META: Record<Acuity, { th: string; dot: string }> = {
   Stable: { th: 'คงที่', dot: 'bg-good' },
 };
 
-export const AGE_GROUPS = ['< 20 ปี', '20–40 ปี', '40–60 ปี', '60–70 ปี', '70–80 ปี', '> 80 ปี'];
+/** ช่วงอายุ (ตรงกับ dropdown ในแท็บ Beds) — ครอบคลุมตั้งแต่ทารกถึงผู้สูงอายุ */
+export const AGE_GROUPS = [
+  '< 1 ปี (ทารก)',
+  '1–5 ปี',
+  '6–12 ปี',
+  '13–17 ปี',
+  '18–39 ปี',
+  '40–59 ปี',
+  '60–69 ปี',
+  '70–79 ปี',
+  '≥ 80 ปี',
+];
 
 export const EVENT_META: Record<LogEvent, { label: string; out: boolean }> = {
   admit: { label: 'รับเข้า', out: false },

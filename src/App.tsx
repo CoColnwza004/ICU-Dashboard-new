@@ -3,6 +3,7 @@ import { BedPanel } from './components/BedPanel';
 import { Indicators } from './components/Indicators';
 import { Monthly } from './components/Monthly';
 import { Overview } from './components/Overview';
+import { Stats } from './components/Stats';
 import { PrintReport, type PrintJob } from './components/PrintReport';
 import { SettingsPanel } from './components/SettingsPanel';
 import { TopBar } from './components/TopBar';
@@ -48,6 +49,7 @@ export default function App() {
             <Overview onOpenBed={setBed} onAdmit={openAdmit} onView={setView} onSettings={() => setSettings(true)} />
           )}
           {view === 'indicators' && <Indicators onPrint={(date) => setPrintJob({ kind: 'daily', date })} />}
+          {view === 'stats' && <Stats onPrint={(ym) => setPrintJob({ kind: 'stats', ym })} />}
           {view === 'monthly' && <Monthly onPrint={(ym) => setPrintJob({ kind: 'monthly', ym })} />}
         </main>
         <footer className="border-t border-line pb-24 md:pb-0">

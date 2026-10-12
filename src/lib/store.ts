@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { IcuData, SheetMeta, SheetOp, SyncState } from '../types';
-import { initialData, normalizeData, type ActionResult } from './logic';
+import { initialData, normalizeData, upgradeLocalData, type ActionResult } from './logic';
 import { fetchSnapshot, postOps, type SheetConfig, type Snapshot } from './sheetApi';
 
 const CONFIG_KEY = 'icu.sheet.config.v2';
@@ -32,7 +32,7 @@ const write = (key: string, value: unknown) => {
   }
 };
 
-const fingerprint = (s: Snapshot) => JSON.stringify([s.beds, s.daily, s.logs, s.gids]);
+const fingerprint = (s: Snapshot) => JSON.stringify([s.beds, s.daily, s.logs, s.stats, s.gids]);
 
 export interface Toast {
   id: number;
@@ -41,8 +41,15 @@ export interface Toast {
 }
 
 export function useIcuStore() {
-  const [config, setConfigState] = useState<SheetConfig>(() => read(CONFIG_KEY, ENV_CONFIG));
-  const [data, setData] = useState<IcuData>(() => read(DATA_KEY, initialData()));
+  const [config, setConfigState] = useState<SheetConfig>(() => {
+    const saved = read(CONFIG_KEY, ENV_CONFIG);
+    return saved.url ? saved : ENV_CONFIG; // ลิงก์ที่ตั้งไว้ตอน deploy ใช้เป็นค่าเริ่มต้นเสมอ
+  });
+  const [data, setData] = useState<IcuData>(() => {
+    const stored = read<Partial<IcuData>>(DATA_KEY, initialData());
+    // ยังไม่เชื่อมชีต: เติมเตียงให้ครบ 8 เตียง · เชื่อมแล้ว: ชีตเป็นตัวกำหนดจำนวนเตียง
+    return config.url ? { ...initialData(), ...stored, stats: stored.stats ?? [] } as IcuData : upgradeLocalData(stored);
+  });
   const [meta, setMeta] = useState<SheetMeta | null>(() => (config.url ? read(META_KEY, null) : null));
   const [state, setState] = useState<SyncState>(config.url ? 'connecting' : 'local');
   const [lastSync, setLastSync] = useState<Date | null>(null);

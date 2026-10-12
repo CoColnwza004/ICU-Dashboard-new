@@ -4,10 +4,9 @@
 /* Design tokens — Liquid Glass (frosted, not too clear)               */
 /* ------------------------------------------------------------------ */
 @theme {
-  --font-sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Inter', 'Noto Sans Thai', 'Helvetica Neue',
-    sans-serif;
-  --font-display: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', 'Noto Sans Thai', 'Helvetica Neue',
-    sans-serif;
+  /* ใช้ฟอนต์เว็บชุดเดียวกันทุกอุปกรณ์ (iPhone / iPad / Android / คอมพิวเตอร์) ไม่ใช้ฟอนต์ระบบของเครื่อง */
+  --font-sans: 'Inter', 'Noto Sans Thai', system-ui, sans-serif;
+  --font-display: 'Inter', 'Noto Sans Thai', system-ui, sans-serif;
 
   --color-canvas: #eef0f5;
   --color-surface: #ffffff;
@@ -120,6 +119,22 @@ input[type='number']::-webkit-outer-spin-button {
 }
 input[type='number'] {
   -moz-appearance: textfield;
+}
+
+/* ปุ่ม/ช่องกรอกใช้ฟอนต์เดียวกับหน้าเว็บ (Safari บน iOS ใช้ฟอนต์ระบบเป็นค่าเริ่มต้น) */
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
+}
+/* ช่องกรอกบนมือถือต้อง ≥ 16px ไม่เช่นนั้น iOS จะซูมหน้าเว็บเมื่อแตะ */
+@media (max-width: 1024px) and (pointer: coarse) {
+  input,
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
 }
 
 /* Soft colour field behind the glass — slow drift, very low contrast */

@@ -1,4 +1,5 @@
 import type {
+  StatsRecord,
   Acuity,
   Bed,
   BedStatus,
@@ -51,7 +52,18 @@ export const initialData = (): IcuData => ({
   beds: DEFAULT_BEDS.map(emptyBed),
   daily: [],
   logs: [],
+  stats: [],
 });
+
+/** ข้อมูลเก่าในเบราว์เซอร์ (ก่อนมีแท็บ Stats / 8 เตียง) → รูปแบบปัจจุบัน */
+export const upgradeLocalData = (d: Partial<IcuData>): IcuData => {
+  const beds = [...(d.beds ?? [])];
+  DEFAULT_BEDS.forEach((n) => {
+    if (!beds.some((b) => b.bedNumber === n)) beds.push(emptyBed(n));
+  });
+  beds.sort((a, b) => a.bedNumber.localeCompare(b.bedNumber));
+  return { beds, daily: d.daily ?? [], logs: d.logs ?? [], stats: d.stats ?? [] };
+};
 
 /* ------------------------------------------------------------------ */
 /* Normalising rows coming from the sheet (people type all sorts)      */
@@ -144,13 +156,32 @@ export const normalizeLog = (r: Raw): LogEntry => ({
   row: typeof r.row === 'number' ? r.row : undefined,
 });
 
-export const normalizeData = (raw: { beds?: Raw[]; daily?: Raw[]; logs?: Raw[] }): IcuData => ({
+const num = (v: unknown) => {
+  const n = Number(String(v ?? '').replace(/,/g, '').trim());
+  return Number.isFinite(n) && n > 0 ? n : 0;
+};
+
+export const normalizeStats = (r: Raw): StatsRecord => ({
+  month: normalizeDateKey(`${str(r.month)}-01`).slice(0, 7),
+  beds: num(r.beds),
+  days: num(r.days),
+  patientDays: num(r.patientDays),
+  discharges: num(r.discharges),
+  note: str(r.note),
+  row: typeof r.row === 'number' ? r.row : undefined,
+});
+
+export const normalizeData = (raw: { beds?: Raw[]; daily?: Raw[]; logs?: Raw[]; stats?: Raw[] }): IcuData => ({
   beds: (raw.beds ?? []).map(normalizeBed).filter((b) => b.bedNumber),
   daily: (raw.daily ?? [])
     .map(normalizeDaily)
     .filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d.date))
     .sort((a, b) => a.date.localeCompare(b.date)),
   logs: (raw.logs ?? []).map(normalizeLog),
+  stats: (raw.stats ?? [])
+    .map(normalizeStats)
+    .filter((x) => /^\d{4}-\d{2}$/.test(x.month))
+    .sort((a, b) => a.month.localeCompare(b.month)),
 });
 
 /* ------------------------------------------------------------------ */
@@ -229,7 +260,7 @@ export const admitPatient = (data: IcuData, bedNumber: string, p: PatientInput):
     note: bed.clinicalGoals,
   };
   return {
-    next: { beds, daily: today.daily, logs: [...data.logs, entry] },
+    next: { ...data, beds, daily: today.daily, logs: [...data.logs, entry] },
     ops: [bedOp(bed), today.op, { type: 'appendLog', entry }],
   };
 };
@@ -267,7 +298,7 @@ export const dischargePatient = (
     note,
   };
   return {
-    next: { beds, daily: today.daily, logs: [...data.logs, entry] },
+    next: { ...data, beds, daily: today.daily, logs: [...data.logs, entry] },
     ops: [bedOp(bed), today.op, { type: 'appendLog', entry }],
   };
 };
@@ -275,6 +306,15 @@ export const dischargePatient = (
 export const saveDaily = (data: IcuData, rec: DailyRecord): ActionResult => {
   const { row: _row, ...record } = rec;
   return { next: { ...data, daily: putDaily(data.daily, rec) }, ops: [{ type: 'upsertDaily', record }] };
+};
+
+export const saveStats = (data: IcuData, rec: StatsRecord): ActionResult => {
+  const { row: _row, ...record } = rec;
+  const exists = data.stats.some((x) => x.month === rec.month);
+  const stats = (exists ? data.stats.map((x) => (x.month === rec.month ? { ...rec, row: x.row } : x)) : [...data.stats, rec]).sort(
+    (a, b) => a.month.localeCompare(b.month),
+  );
+  return { next: { ...data, stats }, ops: [{ type: 'upsertStats', record }] };
 };
 
 /** ส่งข้อมูลทั้งหมดในเครื่องขึ้นชีต (ใช้ตอนเชื่อมต่อครั้งแรก) */
@@ -287,6 +327,10 @@ export const pushAllOps = (data: IcuData): SheetOp[] => [
   ...data.logs.map((l) => {
     const { row: _row, ...entry } = l;
     return { type: 'appendLog', entry } as SheetOp;
+  }),
+  ...(data.stats ?? []).map((x) => {
+    const { row: _row, ...record } = x;
+    return { type: 'upsertStats', record } as SheetOp;
   }),
 ];
 
@@ -354,13 +398,13 @@ export const demoData = (): IcuData => {
     return seed / 233280;
   };
   const daily: DailyRecord[] = [];
-  let census = 2;
+  let census = 4;
   for (let i = 44; i >= 0; i--) {
     const date = shiftDate(today, -i);
-    const admitted = rnd() > 0.55 ? 1 : 0;
-    const refer = census > 1 && rnd() > 0.75 ? 1 : 0;
-    const death = census > 1 && rnd() > 0.93 ? 1 : 0;
-    census = Math.min(4, Math.max(0, census + admitted - refer - death));
+    const admitted = rnd() > 0.45 ? (rnd() > 0.7 ? 2 : 1) : 0;
+    const refer = census > 2 && rnd() > 0.6 ? 1 : 0;
+    const death = census > 2 && rnd() > 0.92 ? 1 : 0;
+    census = Math.min(8, Math.max(1, census + admitted - refer - death));
     const vent = Math.min(census, Math.round(census * (0.4 + rnd() * 0.5)));
     daily.push({
       ...emptyDaily(date),
@@ -386,7 +430,7 @@ export const demoData = (): IcuData => {
       status: 'occupied',
       caseCode: 'CASE-2410',
       acuity: 'Critical',
-      ageGroup: '70–80 ปี',
+      ageGroup: '70–79 ปี',
       gender: 'ชาย',
       admittedAt: ago(3.2),
       clinicalGoals: 'MAP > 65, lung protective ventilation',
@@ -402,7 +446,7 @@ export const demoData = (): IcuData => {
       status: 'occupied',
       caseCode: 'CASE-2414',
       acuity: 'High',
-      ageGroup: '60–70 ปี',
+      ageGroup: '60–69 ปี',
       gender: 'หญิง',
       admittedAt: ago(1.4),
       clinicalGoals: 'Weaning trial, SpO₂ > 94%',
@@ -414,6 +458,31 @@ export const demoData = (): IcuData => {
     },
     { ...emptyBed('ICU-03'), status: 'cleaning' },
     emptyBed('ICU-04'),
+    {
+      ...emptyBed('ICU-05'),
+      status: 'occupied',
+      caseCode: 'CASE-2416',
+      acuity: 'Moderate',
+      ageGroup: '6–12 ปี',
+      gender: 'ชาย',
+      admittedAt: ago(0.6),
+      clinicalGoals: 'Post-op monitoring, pain score < 4',
+      hasIvHl: true,
+      hasFoley: true,
+    },
+    {
+      ...emptyBed('ICU-06'),
+      status: 'occupied',
+      caseCode: 'CASE-2411',
+      acuity: 'Stable',
+      ageGroup: '40–59 ปี',
+      gender: 'หญิง',
+      admittedAt: ago(2.8),
+      clinicalGoals: 'Prepare transfer to ward',
+      hasIvHl: true,
+    },
+    emptyBed('ICU-07'),
+    emptyBed('ICU-08'),
   ];
   const t = daily[daily.length - 1];
   Object.assign(t, countsFromBeds(beds));
@@ -423,6 +492,6 @@ export const demoData = (): IcuData => {
     { timestamp: ago(1.4), event: 'admit', bedNumber: 'ICU-02', caseCode: 'CASE-2414', acuity: 'High', admittedAt: ago(1.4), note: '' },
     { timestamp: ago(0.3), event: 'ward', bedNumber: 'ICU-03', caseCode: 'CASE-2408', acuity: 'Moderate', admittedAt: ago(4.5), note: 'ย้ายอายุรกรรมชาย' },
   ];
-  return { beds, daily, logs };
+  return { beds, daily, logs, stats: [] };
 };
 

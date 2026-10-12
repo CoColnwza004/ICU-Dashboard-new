@@ -1,9 +1,10 @@
-import { Ambulance, ArrowUpRight, BedDouble, Clock, HeartCrack, UserPlus, Wind } from 'lucide-react';
+import { Activity, Ambulance, ArrowUpRight, BedDouble, ChevronRight, Clock, HeartCrack, Repeat, Timer, UserPlus, Wind } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { EVENT_META, INDICATORS } from '../lib/constants';
 import { fmtDateLong, fmtDateShort, fmtDateTime, fmtDayMonth, fmtMonth, parseLocalDateTime } from '../lib/date';
 import { availableMonths, monthlySummary } from '../lib/logic';
 import { sheetLink } from '../lib/sheetApi';
+import { fmtStat, STAT_DEFS, statsFor } from '../lib/stats';
 import { useStore } from '../lib/store';
 import type { IcuData } from '../types';
 import { SeriesChart } from './charts';
@@ -27,6 +28,12 @@ export const downloadMonthCsv = (data: IcuData, ym: string) => {
       [l.timestamp, EVENT_META[l.event].label, l.bedNumber, l.caseCode, l.acuity, l.admittedAt, l.note].map(csvCell).join(','),
     ),
   ];
+  const st = statsFor(data, ym);
+  lines.push(
+    '',
+    ['จำนวนเตียง', 'จำนวนวัน', 'วันนอนรวม', 'ผู้ป่วยจำหน่าย', ...STAT_DEFS.map((d) => `${d.label} (${d.unit})`)].join(','),
+    [st.input.beds, st.input.days, st.input.patientDays, st.input.discharges, ...STAT_DEFS.map((d) => fmtStat(st.values[d.key]))].join(','),
+  );
   const blob = new Blob(['﻿' + lines.join('\n')], { type: 'text/csv;charset=utf-8' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
@@ -41,6 +48,7 @@ export function Monthly({ onPrint }: { onPrint: (ym: string) => void }) {
   const [ym, setYm] = useState(months[0]);
   const [filter, setFilter] = useState<Filter>('all');
   const s = useMemo(() => monthlySummary(data, ym), [data, ym]);
+  const st = useMemo(() => statsFor(data, ym), [data, ym]);
 
   const logs = s.logs.filter((l) => filter === 'all' || (filter === 'in' ? l.event === 'admit' : l.event !== 'admit'));
 
@@ -48,9 +56,12 @@ export function Monthly({ onPrint }: { onPrint: (ym: string) => void }) {
     { label: 'รับใหม่', value: s.admissions, unit: 'ราย', Icon: UserPlus },
     { label: 'Refer / ย้ายวอร์ด', value: s.refers, unit: 'ราย', Icon: Ambulance },
     { label: 'เสียชีวิต', value: s.deaths, unit: 'ราย', Icon: HeartCrack },
-    { label: 'อัตราครองเตียงเฉลี่ย', value: s.occupancy, unit: '%', Icon: BedDouble },
-    { label: 'วันนอนเฉลี่ย (ALOS)', value: s.alos, unit: 'วัน', Icon: Clock },
     { label: 'Ventilator utilization', value: s.ventilatorRate, unit: '%', Icon: Wind },
+    { label: 'ADC · ผู้ป่วยเฉลี่ยต่อวัน', value: fmtStat(st.values.adc), unit: 'ราย/วัน', Icon: Activity },
+    { label: 'ALOS · วันนอนเฉลี่ย', value: fmtStat(st.values.alos), unit: 'วัน', Icon: Clock },
+    { label: 'BOR · อัตราครองเตียง', value: fmtStat(st.values.bor), unit: '%', Icon: BedDouble },
+    { label: 'BTR · อัตราหมุนเวียนเตียง', value: fmtStat(st.values.btr), unit: 'ครั้ง/เตียง', Icon: Repeat },
+    { label: 'TOI · เตียงว่างเฉลี่ย', value: fmtStat(st.values.toi), unit: 'วัน', Icon: Timer },
   ];
 
   return (
@@ -87,7 +98,16 @@ export function Monthly({ onPrint }: { onPrint: (ym: string) => void }) {
           </div>
         </div>
 
-        <div className="mt-10 grid grid-cols-2 gap-4 md:grid-cols-3">
+        <div className="mt-10 mb-3 flex flex-wrap items-center justify-between gap-2 text-[13px] text-ink-2">
+          <span>
+            ADC · ALOS · BOR · BTR · TOI {st.saved ? 'จากแท็บ Stats' : 'คำนวณจากข้อมูลในระบบ'} ({st.input.beds} เตียง ·{' '}
+            {st.input.days} วัน · วันนอนรวม {st.input.patientDays} · จำหน่าย {st.input.discharges})
+          </span>
+          <a href="#stats" className="link inline-flex items-center">
+            กรอก / แก้ไขสถิติ <ChevronRight className="size-4" />
+          </a>
+        </div>
+        <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
           {figures.map(({ label, value, unit, Icon }) => (
             <div key={label} className="card p-5 sm:p-6">
               <div className="flex items-center gap-2.5">

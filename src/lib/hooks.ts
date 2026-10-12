@@ -9,8 +9,8 @@ export const useNow = (ms = 1000) => {
   return now;
 };
 
-export type View = 'overview' | 'indicators' | 'monthly';
-const VIEWS: View[] = ['overview', 'indicators', 'monthly'];
+export type View = 'overview' | 'indicators' | 'stats' | 'monthly';
+const VIEWS: View[] = ['overview', 'indicators', 'stats', 'monthly'];
 
 const fromHash = (): View => {
   const h = window.location.hash.replace('#', '') as View;

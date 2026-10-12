@@ -9,6 +9,7 @@ export interface Snapshot extends SheetMeta {
   beds: Record<string, unknown>[];
   daily: Record<string, unknown>[];
   logs: Record<string, unknown>[];
+  stats?: Record<string, unknown>[];
 }
 
 const isAppsScriptUrl = (url: string) => /^https:\/\/script\.google(usercontent)?\.com\//.test(url.trim());
@@ -59,6 +60,7 @@ export async function postOps(cfg: SheetConfig, ops: SheetOp[]): Promise<Snapsho
 export const sheetLink = (meta: SheetMeta | null, tab?: keyof SheetMeta['gids'], row?: number) => {
   if (!meta?.spreadsheetUrl) return null;
   const base = meta.spreadsheetUrl.split('#')[0];
-  if (!tab) return base;
-  return `${base}#gid=${meta.gids[tab]}${row ? `&range=A${row}` : ''}`;
+  const gid = tab ? meta.gids[tab] : undefined;
+  if (gid === undefined) return base;
+  return `${base}#gid=${gid}${row ? `&range=A${row}` : ''}`;
 };
