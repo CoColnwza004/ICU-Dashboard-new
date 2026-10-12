@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import type { DailyRecord } from '../types';
 import { INDICATORS, type IndicatorGroup } from '../lib/constants';
 import { fmtDateLong, fmtDateShort, fmtDayMonth, shiftDate, todayKey } from '../lib/date';
+import { INDICATOR_ICON } from '../lib/icons';
 import { countsFromBeds, emptyDaily, findDaily, saveDaily } from '../lib/logic';
 import { sheetLink } from '../lib/sheetApi';
 import { useStore } from '../lib/store';
@@ -113,7 +114,7 @@ export function Indicators({ onPrint }: { onPrint: (date: string) => void }) {
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <div className="flex items-center gap-1 rounded-full bg-fill-soft p-1">
+            <div className="glass flex items-center gap-1 rounded-full p-1">
               <IconButton label="วันก่อนหน้า" onClick={() => setDate(shiftDate(date, -1))} disabled={editing}>
                 <ChevronLeft className="size-4" />
               </IconButton>
@@ -182,23 +183,38 @@ export function Indicators({ onPrint }: { onPrint: (date: string) => void }) {
           {GROUPS.map((g) => (
             <div key={g.value} className="card p-6 sm:p-8">
               <p className="eyebrow mb-5">{g.title}</p>
-              <div className="grid grid-cols-2 gap-x-6 gap-y-8 md:grid-cols-4">
-                {INDICATORS.filter((i) => i.group === g.value).map((i) => (
-                  <div key={i.key} className="min-w-0">
-                    <p className="text-[13px] text-ink-2">
-                      <span className="num mr-1.5 text-ink-3">{i.no}</span>
-                      {i.label}
-                    </p>
-                    {editing ? (
-                      <div className="mt-2">
-                        <Stepper label={i.label} value={draft[i.key]} onChange={(v) => setDraft((d) => ({ ...d, [i.key]: v }))} />
+              <div className="grid grid-cols-1 gap-3 min-[420px]:grid-cols-2 md:grid-cols-4">
+                {INDICATORS.filter((i) => i.group === g.value).map((i) => {
+                  const Icon = INDICATOR_ICON[i.key];
+                  const prev = findDaily(data.daily, shiftDate(date, -1));
+                  const diff = prev ? shown[i.key] - prev[i.key] : null;
+                  return (
+                    <div key={i.key} className="well min-w-0 p-4">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="icon-chip size-8 rounded-[10px]">
+                          <Icon className="size-4" strokeWidth={1.7} />
+                        </span>
+                        <span className="num text-[11px] text-ink-3">#{i.no}</span>
                       </div>
-                    ) : (
-                      <p className="num mt-1 text-[40px] leading-tight font-semibold">{shown[i.key]}</p>
-                    )}
-                    <p className="text-[12px] text-ink-3">{i.th}</p>
-                  </div>
-                ))}
+                      <p className="mt-3 truncate text-[13px] font-medium text-ink-2">{i.label}</p>
+                      {editing ? (
+                        <div className="mt-2">
+                          <Stepper label={i.label} value={draft[i.key]} onChange={(v) => setDraft((d) => ({ ...d, [i.key]: v }))} />
+                        </div>
+                      ) : (
+                        <p className="flex items-baseline gap-2">
+                          <span className="num text-[40px] leading-tight font-semibold">{shown[i.key]}</span>
+                          {diff !== null && diff !== 0 && (
+                            <span className="num text-[12px] text-ink-3">
+                              {diff > 0 ? '▲' : '▼'} {Math.abs(diff)}
+                            </span>
+                          )}
+                        </p>
+                      )}
+                      <p className="truncate text-[12px] text-ink-3">{i.th}</p>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           ))}
@@ -270,7 +286,7 @@ export function Indicators({ onPrint }: { onPrint: (date: string) => void }) {
                     key={r.date}
                     onClick={() => !editing && setDate(r.date)}
                     className={cx(
-                      'cursor-pointer border-b border-line/60 transition-colors last:border-0 hover:bg-fill-soft',
+                      'cursor-pointer border-b border-line transition-colors last:border-0 hover:bg-fill-soft',
                       r.date === date && 'bg-fill-soft',
                     )}
                   >

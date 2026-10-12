@@ -1,7 +1,7 @@
 @import 'tailwindcss';
 
 /* ------------------------------------------------------------------ */
-/* Design tokens — quiet, neutral, Apple-like                          */
+/* Design tokens — Liquid Glass (frosted, not too clear)               */
 /* ------------------------------------------------------------------ */
 @theme {
   --font-sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Inter', 'Noto Sans Thai', 'Helvetica Neue',
@@ -9,16 +9,16 @@
   --font-display: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', 'Noto Sans Thai', 'Helvetica Neue',
     sans-serif;
 
-  --color-canvas: #f5f5f7;
+  --color-canvas: #eef0f5;
   --color-surface: #ffffff;
   --color-raised: #fbfbfd;
-  --color-fill: #e8e8ed;
-  --color-fill-soft: #f0f0f3;
-  --color-line: #e5e5ea;
-  --color-line-strong: #d2d2d7;
+  --color-fill: rgb(118 118 128 / 0.16);
+  --color-fill-soft: rgb(118 118 128 / 0.09);
+  --color-line: rgb(60 60 67 / 0.1);
+  --color-line-strong: rgb(60 60 67 / 0.2);
   --color-ink: #1d1d1f;
-  --color-ink-2: #6e6e73;
-  --color-ink-3: #86868b;
+  --color-ink-2: #5f5f66;
+  --color-ink-3: #7d7d85;
   --color-on-ink: #ffffff;
   --color-accent: #0071e3;
   --color-link: #0066cc;
@@ -28,29 +28,57 @@
   --color-serious: #ec835a;
   --color-critical: #d03b3b;
 
-  --radius-card: 22px;
-  --shadow-card: 0 1px 1px rgb(0 0 0 / 0.02), 0 6px 24px -8px rgb(0 0 0 / 0.08);
-  --shadow-float: 0 12px 48px -12px rgb(0 0 0 / 0.25);
+  --radius-card: 26px;
+  --shadow-float: 0 24px 64px -20px rgb(20 30 60 / 0.35);
   --ease-apple: cubic-bezier(0.25, 0.1, 0.25, 1);
+  --ease-liquid: cubic-bezier(0.34, 1.32, 0.5, 1);
+}
+
+:root {
+  /* glass material */
+  --glass-bg: rgb(255 255 255 / 0.62);
+  --glass-bg-strong: rgb(255 255 255 / 0.82);
+  --glass-edge: rgb(255 255 255 / 0.95);
+  --glass-ring: rgb(255 255 255 / 0.45);
+  --glass-sheen: rgb(255 255 255 / 0.5);
+  --glass-shadow: 0 1px 2px rgb(20 30 60 / 0.05), 0 14px 40px -18px rgb(20 30 60 / 0.28);
+  --glass-blur: blur(28px) saturate(185%);
+
+  /* ambient background */
+  --amb-1: #c7d7ff;
+  --amb-2: #e3d6ff;
+  --amb-3: #c9eee2;
+  --amb-4: #ffe0cc;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --color-canvas: #000000;
+    --color-canvas: #07080b;
     --color-surface: #1c1c1e;
     --color-raised: #232325;
-    --color-fill: #2c2c2e;
-    --color-fill-soft: #252527;
-    --color-line: #2c2c2e;
-    --color-line-strong: #3a3a3c;
+    --color-fill: rgb(120 120 128 / 0.32);
+    --color-fill-soft: rgb(120 120 128 / 0.18);
+    --color-line: rgb(255 255 255 / 0.09);
+    --color-line-strong: rgb(255 255 255 / 0.18);
     --color-ink: #f5f5f7;
-    --color-ink-2: #a1a1a6;
-    --color-ink-3: #8e8e93;
+    --color-ink-2: #aeaeb4;
+    --color-ink-3: #8e8e95;
     --color-on-ink: #1d1d1f;
     --color-accent: #2997ff;
-    --color-link: #2997ff;
-    --shadow-card: 0 0 0 1px rgb(255 255 255 / 0.04);
-    --shadow-float: 0 12px 48px -12px rgb(0 0 0 / 0.8);
+    --color-link: #4aa8ff;
+    --shadow-float: 0 24px 64px -20px rgb(0 0 0 / 0.85);
+
+    --glass-bg: rgb(38 39 46 / 0.58);
+    --glass-bg-strong: rgb(32 33 39 / 0.86);
+    --glass-edge: rgb(255 255 255 / 0.2);
+    --glass-ring: rgb(255 255 255 / 0.07);
+    --glass-sheen: rgb(255 255 255 / 0.07);
+    --glass-shadow: 0 14px 40px -18px rgb(0 0 0 / 0.75);
+
+    --amb-1: #1b2b55;
+    --amb-2: #2d1f4d;
+    --amb-3: #0f3a33;
+    --amb-4: #3d2418;
     color-scheme: dark;
   }
 }
@@ -94,14 +122,136 @@ input[type='number'] {
   -moz-appearance: textfield;
 }
 
+/* Soft colour field behind the glass — slow drift, very low contrast */
+.ambient {
+  position: fixed;
+  inset: -10%;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(38% 42% at 12% 8%, var(--amb-1), transparent 70%),
+    radial-gradient(34% 40% at 92% 14%, var(--amb-2), transparent 70%),
+    radial-gradient(40% 44% at 78% 88%, var(--amb-3), transparent 70%),
+    radial-gradient(36% 38% at 8% 82%, var(--amb-4), transparent 70%),
+    var(--color-canvas);
+  animation: drift 60s ease-in-out infinite alternate;
+}
+@keyframes drift {
+  from {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  to {
+    transform: translate3d(-3%, 2%, 0) scale(1.06);
+  }
+}
+
 /* ------------------------------------------------------------------ */
 /* Components                                                          */
 /* ------------------------------------------------------------------ */
 @layer components {
+  /* Liquid glass panel: frosted fill + bright top edge + light-catching rim + soft sheen */
+  .card,
+  .glass {
+    position: relative;
+    isolation: isolate;
+    background: var(--glass-bg);
+    -webkit-backdrop-filter: var(--glass-blur);
+    backdrop-filter: var(--glass-blur);
+    box-shadow:
+      inset 0 1px 0 0 var(--glass-edge),
+      inset 0 0 0 1px var(--glass-ring),
+      var(--glass-shadow);
+  }
   .card {
-    background: var(--color-surface);
     border-radius: var(--radius-card);
-    box-shadow: var(--shadow-card);
+  }
+  .card::before,
+  .glass::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 1px;
+    background: linear-gradient(
+      150deg,
+      var(--glass-edge) 0%,
+      transparent 28%,
+      transparent 70%,
+      color-mix(in srgb, var(--glass-edge) 60%, transparent) 100%
+    );
+    -webkit-mask:
+      linear-gradient(#000 0 0) content-box,
+      linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    pointer-events: none;
+  }
+  .card::after,
+  .glass::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    background: radial-gradient(120% 70% at 10% -10%, var(--glass-sheen), transparent 55%);
+    pointer-events: none;
+  }
+  .glass-strong {
+    background: var(--glass-bg-strong);
+  }
+
+  /* inner tile on top of a glass card */
+  .well {
+    border-radius: 18px;
+    background: color-mix(in srgb, var(--glass-bg-strong) 55%, transparent);
+    box-shadow:
+      inset 0 1px 0 0 color-mix(in srgb, var(--glass-edge) 70%, transparent),
+      inset 0 0 0 1px var(--color-line);
+  }
+
+  .icon-chip {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    border-radius: 12px;
+    background: color-mix(in srgb, var(--glass-bg-strong) 80%, transparent);
+    box-shadow:
+      inset 0 1px 0 0 var(--glass-edge),
+      inset 0 0 0 1px var(--color-line),
+      0 4px 12px -6px rgb(20 30 60 / 0.25);
+    color: var(--color-ink-2);
+  }
+
+  .btn-ink {
+    background: linear-gradient(180deg, color-mix(in srgb, var(--color-ink) 82%, #fff) 0%, var(--color-ink) 55%);
+    color: var(--color-on-ink);
+    box-shadow:
+      inset 0 1px 0 0 rgb(255 255 255 / 0.28),
+      inset 0 0 0 1px rgb(0 0 0 / 0.08),
+      0 8px 20px -10px rgb(0 0 0 / 0.55);
+  }
+  .btn-glass {
+    background: color-mix(in srgb, var(--glass-bg-strong) 85%, transparent);
+    -webkit-backdrop-filter: var(--glass-blur);
+    backdrop-filter: var(--glass-blur);
+    color: var(--color-ink);
+    box-shadow:
+      inset 0 1px 0 0 var(--glass-edge),
+      inset 0 0 0 1px var(--color-line),
+      0 6px 16px -10px rgb(20 30 60 / 0.35);
+  }
+  .seg-track {
+    background: color-mix(in srgb, var(--color-fill) 80%, transparent);
+    box-shadow: inset 0 1px 2px rgb(0 0 0 / 0.06);
+  }
+  .seg-thumb {
+    background: var(--glass-bg-strong);
+    box-shadow:
+      inset 0 1px 0 0 var(--glass-edge),
+      inset 0 0 0 1px var(--color-line),
+      0 3px 10px -2px rgb(20 30 60 / 0.22);
   }
 
   .eyebrow {
@@ -133,17 +283,12 @@ input[type='number'] {
     text-underline-offset: 3px;
   }
 
-  .glass {
-    background: color-mix(in srgb, var(--color-canvas) 72%, transparent);
-    backdrop-filter: saturate(180%) blur(20px);
-    -webkit-backdrop-filter: saturate(180%) blur(20px);
-  }
 
   .field {
     width: 100%;
-    border-radius: 12px;
-    background: var(--color-fill-soft);
-    border: 1px solid transparent;
+    border-radius: 14px;
+    background: color-mix(in srgb, var(--glass-bg-strong) 70%, transparent);
+    border: 1px solid var(--color-line);
     padding: 10px 14px;
     font-size: 15px;
     color: var(--color-ink);
@@ -215,6 +360,7 @@ input[type='number'] {
   animation: pulse-soft 2s ease-in-out infinite;
 }
 @media (prefers-reduced-motion: reduce) {
+  .ambient,
   .animate-rise,
   .animate-fade,
   .animate-sheet,
@@ -260,5 +406,8 @@ input[type='number'] {
   }
   .print-only {
     display: block !important;
+  }
+  .ambient {
+    display: none;
   }
 }

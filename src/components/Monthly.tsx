@@ -1,4 +1,4 @@
-import { ArrowUpRight } from 'lucide-react';
+import { Ambulance, ArrowUpRight, BedDouble, Clock, HeartCrack, UserPlus, Wind } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { EVENT_META, INDICATORS } from '../lib/constants';
 import { fmtDateLong, fmtDateShort, fmtDateTime, fmtDayMonth, fmtMonth, parseLocalDateTime } from '../lib/date';
@@ -7,7 +7,7 @@ import { sheetLink } from '../lib/sheetApi';
 import { useStore } from '../lib/store';
 import type { IcuData } from '../types';
 import { SeriesChart } from './charts';
-import { Button, cx, Dot, Empty, Segmented } from './ui';
+import { Button, Dot, Empty, Segmented } from './ui';
 
 type Filter = 'all' | 'in' | 'out';
 
@@ -45,12 +45,12 @@ export function Monthly({ onPrint }: { onPrint: (ym: string) => void }) {
   const logs = s.logs.filter((l) => filter === 'all' || (filter === 'in' ? l.event === 'admit' : l.event !== 'admit'));
 
   const figures = [
-    { label: 'รับใหม่', value: s.admissions, unit: 'ราย' },
-    { label: 'Refer / ย้ายวอร์ด', value: s.refers, unit: 'ราย' },
-    { label: 'เสียชีวิต', value: s.deaths, unit: 'ราย' },
-    { label: 'อัตราครองเตียงเฉลี่ย', value: s.occupancy, unit: '%' },
-    { label: 'วันนอนเฉลี่ย (ALOS)', value: s.alos, unit: 'วัน' },
-    { label: 'Ventilator utilization', value: s.ventilatorRate, unit: '%' },
+    { label: 'รับใหม่', value: s.admissions, unit: 'ราย', Icon: UserPlus },
+    { label: 'Refer / ย้ายวอร์ด', value: s.refers, unit: 'ราย', Icon: Ambulance },
+    { label: 'เสียชีวิต', value: s.deaths, unit: 'ราย', Icon: HeartCrack },
+    { label: 'อัตราครองเตียงเฉลี่ย', value: s.occupancy, unit: '%', Icon: BedDouble },
+    { label: 'วันนอนเฉลี่ย (ALOS)', value: s.alos, unit: 'วัน', Icon: Clock },
+    { label: 'Ventilator utilization', value: s.ventilatorRate, unit: '%', Icon: Wind },
   ];
 
   return (
@@ -68,7 +68,7 @@ export function Monthly({ onPrint }: { onPrint: (ym: string) => void }) {
           <div className="flex flex-wrap items-center gap-2">
             <select
               aria-label="เลือกเดือน"
-              className="field h-10 w-auto rounded-full py-0 pr-9"
+              className="field btn-glass h-10 w-auto rounded-full py-0 pr-9"
               value={ym}
               onChange={(e) => setYm(e.target.value)}
             >
@@ -87,22 +87,18 @@ export function Monthly({ onPrint }: { onPrint: (ym: string) => void }) {
           </div>
         </div>
 
-        <div className="card mt-10 grid grid-cols-2 md:grid-cols-3">
-          {figures.map((f, i) => (
-            <div
-              key={f.label}
-              className={cx(
-                'border-line p-6 sm:p-8',
-                i % 2 === 0 ? 'border-r' : 'border-r-0',
-                i < 4 ? 'border-b' : 'border-b-0',
-                i % 3 !== 2 ? 'md:border-r' : 'md:border-r-0',
-                i < 3 ? 'md:border-b' : 'md:border-b-0',
-              )}
-            >
-              <p className="text-[13px] text-ink-2">{f.label}</p>
-              <p className="mt-2">
-                <span className="num text-[36px] font-semibold sm:text-[44px]">{f.value}</span>
-                <span className="ml-1 text-[15px] text-ink-3">{f.unit}</span>
+        <div className="mt-10 grid grid-cols-2 gap-4 md:grid-cols-3">
+          {figures.map(({ label, value, unit, Icon }) => (
+            <div key={label} className="card p-5 sm:p-6">
+              <div className="flex items-center gap-2.5">
+                <span className="icon-chip">
+                  <Icon className="size-[18px]" strokeWidth={1.7} />
+                </span>
+                <p className="text-[13px] font-medium text-ink-2">{label}</p>
+              </div>
+              <p className="mt-4">
+                <span className="num text-[36px] font-semibold sm:text-[44px]">{value}</span>
+                <span className="ml-1 text-[15px] text-ink-3">{unit}</span>
               </p>
             </div>
           ))}
@@ -178,7 +174,7 @@ export function Monthly({ onPrint }: { onPrint: (ym: string) => void }) {
                   const b = parseLocalDateTime(l.timestamp);
                   const los = l.event !== 'admit' && a && b ? Math.max(0, (b.getTime() - a.getTime()) / 86_400_000) : null;
                   return (
-                    <tr key={`${l.row ?? idx}-${l.timestamp}`} className="border-b border-line/60 last:border-0">
+                    <tr key={`${l.row ?? idx}-${l.timestamp}`} className="border-b border-line transition-colors last:border-0 hover:bg-fill-soft">
                       <td className="py-3 pr-3 pl-6 whitespace-nowrap text-ink-2 sm:pl-8">{fmtDateTime(l.timestamp)}</td>
                       <td className="px-3 py-3 whitespace-nowrap">
                         <span className="inline-flex items-center gap-1.5">

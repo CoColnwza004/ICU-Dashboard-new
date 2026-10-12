@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, type ButtonHTMLAttributes, type ReactNode } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState, type ButtonHTMLAttributes, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { Minus, Plus, X } from 'lucide-react';
 import type { Toast } from '../lib/store';
@@ -28,9 +28,9 @@ export function Button({
         size === 'sm' && 'h-8 px-3.5 text-[13px]',
         size === 'md' && 'h-10 px-5 text-[14px]',
         size === 'lg' && 'h-12 px-7 text-[15px]',
-        variant === 'primary' && 'bg-ink text-on-ink hover:opacity-85',
+        variant === 'primary' && 'btn-ink hover:opacity-90',
         variant === 'accent' && 'bg-accent text-white hover:opacity-90',
-        variant === 'secondary' && 'bg-fill text-ink hover:bg-line-strong',
+        variant === 'secondary' && 'btn-glass hover:brightness-[1.03]',
         variant === 'ghost' && 'text-ink-2 hover:text-ink hover:bg-fill-soft',
         variant === 'danger' && 'bg-critical/10 text-critical hover:bg-critical/15',
         className,
@@ -76,19 +76,44 @@ export function Segmented<T extends string>({
   stretch,
 }: {
   options: { value: T; label: ReactNode }[];
-  stretch?: boolean;
   value: T;
   onChange: (v: T) => void;
   size?: 'sm' | 'md';
   className?: string;
   label?: string;
+  stretch?: boolean;
 }) {
+  const track = useRef<HTMLDivElement>(null);
+  const [thumb, setThumb] = useState<{ x: number; w: number } | null>(null);
+
+  // วัดตำแหน่งปุ่มที่เลือก แล้วเลื่อน "หยดแก้ว" ไปหาแบบมีเด้งเล็กน้อย
+  useLayoutEffect(() => {
+    const el = track.current;
+    if (!el) return;
+    const measure = () => {
+      const btn = el.querySelector<HTMLElement>('[aria-selected="true"]');
+      if (btn) setThumb({ x: btn.offsetLeft, w: btn.offsetWidth });
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [value, options.length]);
+
   return (
     <div
+      ref={track}
       role="tablist"
       aria-label={label}
-      className={cx('inline-flex rounded-full bg-fill p-[3px] max-w-full overflow-x-auto', className)}
+      className={cx('seg-track relative inline-flex max-w-full overflow-x-auto rounded-full p-[3px]', className)}
     >
+      {thumb && (
+        <span
+          aria-hidden
+          className="seg-thumb absolute top-[3px] bottom-[3px] left-0 rounded-full transition-[transform,width] duration-500 ease-[var(--ease-liquid)]"
+          style={{ transform: `translateX(${thumb.x}px)`, width: thumb.w }}
+        />
+      )}
       {options.map((o) => {
         const active = o.value === value;
         return (
@@ -99,10 +124,10 @@ export function Segmented<T extends string>({
             aria-selected={active}
             onClick={() => onChange(o.value)}
             className={cx(
-              'rounded-full whitespace-nowrap font-medium transition-all duration-200 ease-[var(--ease-apple)]',
+              'relative z-[1] rounded-full font-medium whitespace-nowrap transition-colors duration-200',
               stretch && 'flex-1',
               size === 'md' ? 'h-8 px-4 text-[13px]' : 'h-7 px-3 text-[12px]',
-              active ? 'bg-surface text-ink shadow-[0_1px_4px_rgb(0_0_0/0.12)]' : 'text-ink-2 hover:text-ink',
+              active ? 'text-ink' : 'text-ink-2 hover:text-ink',
             )}
           >
             {o.label}
@@ -147,7 +172,7 @@ export function Switch({
         onClick={() => onChange(!checked)}
         className={cx(
           'relative h-[31px] w-[51px] shrink-0 rounded-full transition-colors duration-200',
-          checked ? 'bg-good' : 'bg-fill',
+          checked ? 'bg-good' : 'bg-line-strong',
         )}
       >
         <span
@@ -179,12 +204,12 @@ export function Stepper({
 }) {
   const clamp = (n: number) => Math.max(min, Math.min(max, n));
   return (
-    <div className="inline-flex items-center gap-1 rounded-full bg-fill-soft p-1">
+    <div className="seg-track inline-flex items-center gap-1 rounded-full p-1">
       <button
         type="button"
         aria-label={`ลด ${label}`}
         onClick={() => onChange(clamp(value - 1))}
-        className="inline-flex size-8 items-center justify-center rounded-full text-ink-2 hover:bg-surface hover:text-ink disabled:opacity-30"
+        className="inline-flex size-8 items-center justify-center rounded-full text-ink-2 transition-colors hover:text-ink enabled:hover:[background:var(--glass-bg-strong)] disabled:opacity-30"
         disabled={value <= min}
       >
         <Minus className="size-4" strokeWidth={1.75} />
@@ -203,7 +228,7 @@ export function Stepper({
         type="button"
         aria-label={`เพิ่ม ${label}`}
         onClick={() => onChange(clamp(value + 1))}
-        className="inline-flex size-8 items-center justify-center rounded-full text-ink-2 hover:bg-surface hover:text-ink disabled:opacity-30"
+        className="inline-flex size-8 items-center justify-center rounded-full text-ink-2 transition-colors hover:text-ink enabled:hover:[background:var(--glass-bg-strong)] disabled:opacity-30"
         disabled={value >= max}
       >
         <Plus className="size-4" strokeWidth={1.75} />
@@ -252,15 +277,15 @@ export function Modal({
   if (!open) return null;
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-6" role="presentation">
-      <div className="animate-fade absolute inset-0 bg-black/30 backdrop-blur-[2px]" onClick={onClose} />
+      <div className="animate-fade absolute inset-0 bg-black/25 backdrop-blur-[6px]" onClick={onClose} />
       <div
         ref={ref}
         role="dialog"
         aria-modal="true"
         tabIndex={-1}
         className={cx(
-          'animate-sheet relative flex max-h-[92dvh] w-full flex-col overflow-hidden bg-surface shadow-[var(--shadow-float)] focus:outline-none',
-          'rounded-t-[28px] sm:rounded-[28px]',
+          'animate-sheet glass glass-strong flex max-h-[92dvh] w-full flex-col overflow-hidden focus:outline-none',
+          'rounded-t-[30px] sm:rounded-[30px]',
           width,
         )}
       >
@@ -269,7 +294,7 @@ export function Modal({
             <h2 className="display text-[22px] sm:text-[26px]">{title}</h2>
             {subtitle && <p className="mt-1 text-[14px] text-ink-2">{subtitle}</p>}
           </div>
-          <IconButton label="ปิด" onClick={onClose} className="-mr-2 bg-fill-soft">
+          <IconButton label="ปิด" onClick={onClose} className="btn-glass -mr-2">
             <X className="size-4" strokeWidth={2} />
           </IconButton>
         </header>
@@ -316,13 +341,13 @@ export function Toasts({ toasts }: { toasts: Toast[] }) {
   return (
     <div
       aria-live="polite"
-      className="pointer-events-none fixed inset-x-0 bottom-6 z-[60] flex flex-col items-center gap-2 px-4"
+      className="pointer-events-none fixed inset-x-0 bottom-24 z-[60] flex flex-col items-center gap-2 px-4 md:bottom-6"
     >
       {toasts.map((t) => (
         <div
           key={t.id}
           className={cx(
-            'animate-sheet glass pointer-events-auto max-w-md rounded-full px-5 py-2.5 text-[13px] font-medium shadow-[var(--shadow-float)]',
+            'animate-sheet glass glass-strong pointer-events-auto max-w-md rounded-full px-5 py-2.5 text-[13px] font-medium shadow-[var(--shadow-float)]',
             t.tone === 'error' ? 'text-critical' : 'text-ink',
           )}
         >

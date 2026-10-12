@@ -41,15 +41,16 @@ export default function App() {
   return (
     <StoreContext.Provider value={store}>
       <div className="screen-only min-h-dvh">
+        <div className="ambient" aria-hidden />
         <TopBar view={view} onView={setView} onSettings={() => setSettings(true)} />
-        <main className="mx-auto max-w-[1120px] px-4 pb-24 sm:px-6">
+        <main className="mx-auto max-w-[1120px] px-4 pb-32 sm:px-6 md:pb-24">
           {view === 'overview' && (
             <Overview onOpenBed={setBed} onAdmit={openAdmit} onView={setView} onSettings={() => setSettings(true)} />
           )}
           {view === 'indicators' && <Indicators onPrint={(date) => setPrintJob({ kind: 'daily', date })} />}
           {view === 'monthly' && <Monthly onPrint={(ym) => setPrintJob({ kind: 'monthly', ym })} />}
         </main>
-        <footer className="border-t border-line">
+        <footer className="border-t border-line pb-24 md:pb-0">
           <div className="mx-auto flex max-w-[1120px] flex-wrap items-center justify-between gap-2 px-4 py-6 text-[12px] text-ink-3 sm:px-6">
             <p>
               {HOSPITAL} · หอผู้ป่วยวิกฤต · ข้อมูลไม่ระบุตัวตนผู้ป่วย

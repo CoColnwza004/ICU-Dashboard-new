@@ -141,7 +141,7 @@ export function SettingsPanel({ open, onClose }: { open: boolean; onClose: () =>
     >
       <div className="space-y-8 pb-2">
         {/* Status */}
-        <section className="rounded-2xl bg-fill-soft p-5">
+        <section className="well p-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="min-w-0">
               <p className="flex items-center gap-2 text-[15px] font-medium">
@@ -171,7 +171,7 @@ export function SettingsPanel({ open, onClose }: { open: boolean; onClose: () =>
                     href={sheetLink(meta) ?? '#'}
                     target="_blank"
                     rel="noreferrer"
-                    className="inline-flex h-8 items-center gap-1 rounded-full bg-surface px-3.5 text-[13px] font-medium hover:opacity-80"
+                    className="btn-glass inline-flex h-8 items-center gap-1 rounded-full px-3.5 text-[13px] font-medium"
                   >
                     เปิดชีต <ArrowUpRight className="size-3.5" />
                   </a>
@@ -230,7 +230,7 @@ export function SettingsPanel({ open, onClose }: { open: boolean; onClose: () =>
         {connected && hasContent(backup) && (
           <section>
             <h3 className="eyebrow mb-3">ย้ายข้อมูลเดิม</h3>
-            <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-fill-soft p-5">
+            <div className="well flex flex-wrap items-center justify-between gap-3 p-5">
               <p className="max-w-md text-[13px] text-ink-2">
                 มีข้อมูลที่บันทึกไว้ในเบราว์เซอร์นี้ก่อนเชื่อมต่อ ({backup?.daily.length ?? 0} วัน, {backup?.logs.length ?? 0} รายการทะเบียน)
                 ส่งขึ้นชีตได้ — แถวที่มีวันที่หรือเตียงเดียวกันในชีตจะถูกเขียนทับ
@@ -271,7 +271,7 @@ export function SettingsPanel({ open, onClose }: { open: boolean; onClose: () =>
           <ol className="space-y-4">
             {STEPS.map((s, i) => (
               <li key={i} className="flex gap-4">
-                <span className="num inline-flex size-7 shrink-0 items-center justify-center rounded-full bg-fill-soft text-[13px] font-semibold">
+                <span className="icon-chip num size-7 shrink-0 rounded-full text-[13px] font-semibold text-ink">
                   {i + 1}
                 </span>
                 <p className="pt-0.5 text-[14px] leading-relaxed text-ink-2">{s}</p>

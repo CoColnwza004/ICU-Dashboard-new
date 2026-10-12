@@ -1,6 +1,7 @@
 import { ArrowUpRight } from 'lucide-react';
 import type { Bed } from '../types';
 import { ACUITY_META, DEVICES, STATUS_META } from '../lib/constants';
+import { DEVICE_ICON } from '../lib/icons';
 import { daysBetween } from '../lib/date';
 import { cx, Dot } from './ui';
 
@@ -20,13 +21,26 @@ export function BedCard({
   const devices = DEVICES.filter((d) => bed[d.key]);
   const los = occupied ? daysBetween(bed.admittedAt) + 1 : 0;
 
+  const halo =
+    bed.status === 'occupied'
+      ? { Critical: '#d03b3b', High: '#ec835a', Moderate: '#fab219', Stable: '#0ca30c', '': '#8e8e93' }[bed.acuity]
+      : bed.status === 'available'
+        ? '#0ca30c'
+        : '#fab219';
+
   return (
     <article
       className={cx(
-        'card group relative flex min-h-[180px] flex-col p-5 sm:min-h-[248px] transition-transform duration-300 ease-[var(--ease-apple)]',
-        'hover:-translate-y-0.5',
+        'card group flex min-h-[180px] flex-col overflow-hidden p-5 sm:min-h-[260px] transition-transform duration-500 ease-[var(--ease-liquid)]',
+        'hover:-translate-y-1',
       )}
     >
+      {/* แสงสีจาง ๆ ตามระดับความรุนแรง / สถานะ */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -top-16 -right-12 -z-10 size-48 rounded-full opacity-[0.22] blur-2xl transition-opacity duration-500 group-hover:opacity-35"
+        style={{ background: `radial-gradient(circle, ${halo} 0%, transparent 70%)` }}
+      />
       <button
         type="button"
         onClick={onOpen}
@@ -77,11 +91,15 @@ export function BedCard({
 
           {devices.length > 0 && (
             <ul className="mt-4 flex flex-wrap gap-1.5">
-              {devices.map((d) => (
-                <li key={d.key} className="rounded-full bg-fill-soft px-2.5 py-1 text-[11px] font-medium text-ink-2">
-                  {d.label}
-                </li>
-              ))}
+              {devices.map((d) => {
+                const Icon = DEVICE_ICON[d.key];
+                return (
+                  <li key={d.key} className="well inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-medium text-ink-2">
+                    <Icon className="size-3 text-ink-3" strokeWidth={2} />
+                    {d.label}
+                  </li>
+                );
+              })}
             </ul>
           )}
 
@@ -95,14 +113,14 @@ export function BedCard({
             {bed.status === 'available' ? 'พร้อมรับผู้ป่วยใหม่' : 'รอทำความสะอาดและเตรียมเตียง'}
           </p>
           {bed.status === 'available' ? (
-            <span className="pointer-events-none mt-3 inline-flex h-9 w-fit items-center rounded-full bg-ink px-4 text-[13px] font-medium text-on-ink transition-opacity group-hover:opacity-85">
+            <span className="btn-ink pointer-events-none mt-3 inline-flex h-9 w-fit items-center rounded-full px-4 text-[13px] font-medium transition-opacity group-hover:opacity-90">
               รับผู้ป่วย
             </span>
           ) : (
             <button
               type="button"
               onClick={onMarkReady}
-              className="pointer-events-auto relative mt-3 inline-flex h-9 w-fit items-center rounded-full bg-fill px-4 text-[13px] font-medium text-ink transition-colors hover:bg-line-strong"
+              className="btn-glass pointer-events-auto relative mt-3 inline-flex h-9 w-fit items-center rounded-full px-4 text-[13px] font-medium"
             >
               พร้อมใช้งาน
             </button>

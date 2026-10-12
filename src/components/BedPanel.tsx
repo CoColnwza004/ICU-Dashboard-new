@@ -150,7 +150,7 @@ export function BedPanel({ bedNumber, onClose }: { bedNumber: string | null; onC
                     onClick={() => setTarget(b.bedNumber)}
                     className={cx(
                       'num h-10 rounded-full px-4 text-[14px] font-medium transition-colors',
-                      target === b.bedNumber ? 'bg-ink text-on-ink' : 'bg-fill-soft text-ink-2 hover:text-ink',
+                      target === b.bedNumber ? 'btn-ink' : 'btn-glass text-ink-2 hover:text-ink',
                     )}
                   >
                     {b.bedNumber}
@@ -208,7 +208,7 @@ export function BedPanel({ bedNumber, onClose }: { bedNumber: string | null; onC
                   onClick={() => set('acuity', a)}
                   className={cx(
                     'flex items-center gap-2 rounded-2xl px-4 py-3 text-left transition-colors',
-                    form.acuity === a ? 'bg-ink text-on-ink' : 'bg-fill-soft text-ink hover:bg-fill',
+                    form.acuity === a ? 'btn-ink' : 'well text-ink hover:brightness-[1.02]',
                   )}
                 >
                   <Dot className={ACUITY_META[a].dot} />
@@ -224,7 +224,7 @@ export function BedPanel({ bedNumber, onClose }: { bedNumber: string | null; onC
           </Group>
 
           <Group title="อุปกรณ์และตัวชี้วัดคุณภาพ">
-            <div className="divide-y divide-line rounded-2xl bg-fill-soft px-4">
+            <div className="well divide-y divide-line px-4">
               {DEVICES.map((d) => (
                 <Switch key={d.key} label={d.label} hint={d.th} checked={form[d.key]} onChange={(v) => set(d.key, v)} />
               ))}

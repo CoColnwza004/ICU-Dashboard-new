@@ -73,7 +73,7 @@ function ChartTooltip({
 }) {
   if (!active || !payload?.length) return null;
   return (
-    <div className="min-w-[180px] rounded-2xl bg-surface px-4 py-3 text-[12px] shadow-[var(--shadow-float)] ring-1 ring-line">
+    <div className="glass glass-strong min-w-[180px] rounded-2xl px-4 py-3 text-[12px]">
       <p className="mb-2 font-semibold text-ink">{labelFormat ? labelFormat(String(label)) : label}</p>
       <ul className="space-y-1">
         {series.map((s, i) => {
