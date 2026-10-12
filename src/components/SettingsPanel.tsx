@@ -222,7 +222,7 @@ export function SettingsPanel({ open, onClose }: { open: boolean; onClose: () =>
               )}
             </div>
             {envConfigured && (
-              <p className="text-[12px] text-ink-3">ค่าเริ่มต้นของลิงก์ถูกตั้งไว้แล้วตอน deploy (VITE_SHEETS_API_URL)</p>
+              <p className="text-[12px] text-ink-3">ทุกเครื่องเชื่อมกับชีตหลักของระบบโดยอัตโนมัติ — ช่องนี้ใช้เฉพาะเมื่อต้องการเปลี่ยนไปใช้ชีตอื่น</p>
             )}
           </div>
         </section>

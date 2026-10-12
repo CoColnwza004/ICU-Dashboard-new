@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { IcuData, SheetMeta, SheetOp, SyncState } from '../types';
 import { initialData, normalizeData, upgradeLocalData, type ActionResult } from './logic';
+import { DEFAULT_SHEETS_API_URL } from '../config';
 import { fetchSnapshot, postOps, type SheetConfig, type Snapshot } from './sheetApi';
 
 const CONFIG_KEY = 'icu.sheet.config.v2';
@@ -10,7 +11,7 @@ const META_KEY = 'icu.sheet.meta.v2';
 const POLL_MS = Math.max(2000, Number(import.meta.env.VITE_POLL_MS) || 5000);
 
 const ENV_CONFIG: SheetConfig = {
-  url: (import.meta.env.VITE_SHEETS_API_URL as string | undefined)?.trim() || '',
+  url: (import.meta.env.VITE_SHEETS_API_URL as string | undefined)?.trim() || DEFAULT_SHEETS_API_URL,
   token: (import.meta.env.VITE_SHEETS_API_TOKEN as string | undefined)?.trim() || '',
 };
 
@@ -43,7 +44,7 @@ export interface Toast {
 export function useIcuStore() {
   const [config, setConfigState] = useState<SheetConfig>(() => {
     const saved = read(CONFIG_KEY, ENV_CONFIG);
-    return saved.url ? saved : ENV_CONFIG; // ลิงก์ที่ตั้งไว้ตอน deploy ใช้เป็นค่าเริ่มต้นเสมอ
+    return saved.url ? saved : ENV_CONFIG; // ไม่มีลิงก์ที่บันทึกไว้ในเครื่อง → ใช้ชีตหลักของระบบอัตโนมัติ
   });
   const [data, setData] = useState<IcuData>(() => {
     const stored = read<Partial<IcuData>>(DATA_KEY, initialData());
