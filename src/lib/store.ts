@@ -1,0 +1,212 @@
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import type { IcuData, SheetMeta, SheetOp, SyncState } from '../types';
+import { initialData, normalizeData, type ActionResult } from './logic';
+import { fetchSnapshot, postOps, type SheetConfig, type Snapshot } from './sheetApi';
+
+const CONFIG_KEY = 'icu.sheet.config.v2';
+const DATA_KEY = 'icu.data.v2';
+const META_KEY = 'icu.sheet.meta.v2';
+
+const POLL_MS = Math.max(2000, Number(import.meta.env.VITE_POLL_MS) || 5000);
+
+const ENV_CONFIG: SheetConfig = {
+  url: (import.meta.env.VITE_SHEETS_API_URL as string | undefined)?.trim() || '',
+  token: (import.meta.env.VITE_SHEETS_API_TOKEN as string | undefined)?.trim() || '',
+};
+
+const read = <T,>(key: string, fallback: T): T => {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? (JSON.parse(raw) as T) : fallback;
+  } catch {
+    return fallback;
+  }
+};
+
+const write = (key: string, value: unknown) => {
+  try {
+    if (value === null) localStorage.removeItem(key);
+    else localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    /* storage อาจถูกปิดไว้ — ไม่เป็นไร */
+  }
+};
+
+const fingerprint = (s: Snapshot) => JSON.stringify([s.beds, s.daily, s.logs, s.gids]);
+
+export interface Toast {
+  id: number;
+  text: string;
+  tone: 'default' | 'error';
+}
+
+export function useIcuStore() {
+  const [config, setConfigState] = useState<SheetConfig>(() => read(CONFIG_KEY, ENV_CONFIG));
+  const [data, setData] = useState<IcuData>(() => read(DATA_KEY, initialData()));
+  const [meta, setMeta] = useState<SheetMeta | null>(() => (config.url ? read(META_KEY, null) : null));
+  const [state, setState] = useState<SyncState>(config.url ? 'connecting' : 'local');
+  const [lastSync, setLastSync] = useState<Date | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [toasts, setToasts] = useState<Toast[]>([]);
+
+  const dataRef = useRef(data);
+  const configRef = useRef(config);
+  const pending = useRef(0);
+  const inFlight = useRef(false);
+  const lastPrint = useRef('');
+  const queue = useRef<Promise<void>>(Promise.resolve());
+
+  dataRef.current = data;
+  configRef.current = config;
+
+  useEffect(() => write(DATA_KEY, data), [data]);
+  useEffect(() => write(META_KEY, meta), [meta]);
+
+  const toast = useCallback((text: string, tone: Toast['tone'] = 'default') => {
+    const id = Date.now() + Math.random();
+    setToasts((t) => [...t, { id, text, tone }]);
+    window.setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 3600);
+  }, []);
+
+  const applySnapshot = useCallback((snap: Snapshot) => {
+    const print = fingerprint(snap);
+    if (print !== lastPrint.current) {
+      lastPrint.current = print;
+      const next = normalizeData(snap);
+      dataRef.current = next;
+      setData(next);
+      setMeta({ spreadsheetId: snap.spreadsheetId, spreadsheetUrl: snap.spreadsheetUrl, title: snap.title, gids: snap.gids });
+    }
+    setLastSync(new Date());
+    setError(null);
+    setState(pending.current > 0 ? 'saving' : 'live');
+  }, []);
+
+  /** ดึงข้อมูลล่าสุดจากชีต (ข้ามรอบถ้ากำลังบันทึก เพื่อไม่ให้ค่าเก่าทับค่าที่เพิ่งแก้) */
+  const pull = useCallback(async () => {
+    const cfg = configRef.current;
+    if (!cfg.url || inFlight.current || pending.current > 0) return;
+    inFlight.current = true;
+    try {
+      const snap = await fetchSnapshot(cfg);
+      if (pending.current === 0 && configRef.current.url === cfg.url) applySnapshot(snap);
+    } catch (e) {
+      setState(navigator.onLine ? 'error' : 'offline');
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      inFlight.current = false;
+    }
+  }, [applySnapshot]);
+
+  // Real-time polling: ทุก POLL_MS ขณะหน้าเว็บเปิดอยู่ + ทันทีเมื่อกลับมาที่แท็บ
+  useEffect(() => {
+    if (!config.url) {
+      setState('local');
+      return;
+    }
+    setState((s) => (s === 'local' ? 'connecting' : s));
+    lastPrint.current = '';
+    void pull();
+    const tick = window.setInterval(() => {
+      if (document.visibilityState === 'visible') void pull();
+    }, POLL_MS);
+    const wake = () => document.visibilityState === 'visible' && void pull();
+    document.addEventListener('visibilitychange', wake);
+    window.addEventListener('focus', wake);
+    window.addEventListener('online', wake);
+    return () => {
+      window.clearInterval(tick);
+      document.removeEventListener('visibilitychange', wake);
+      window.removeEventListener('focus', wake);
+      window.removeEventListener('online', wake);
+    };
+  }, [config.url, config.token, pull]);
+
+  const send = useCallback(
+    (ops: SheetOp[], okText?: string) => {
+      const cfg = configRef.current;
+      if (!cfg.url || ops.length === 0) {
+        if (okText) toast(okText);
+        return Promise.resolve();
+      }
+      pending.current += 1;
+      setState('saving');
+      const job = queue.current.then(async () => {
+        try {
+          const snap = await postOps(cfg, ops);
+          pending.current -= 1;
+          if (pending.current === 0) applySnapshot(snap);
+          if (okText) toast(`${okText} · บันทึกลง Google Sheet แล้ว`);
+        } catch (e) {
+          pending.current -= 1;
+          const msg = e instanceof Error ? e.message : String(e);
+          setError(msg);
+          setState('error');
+          toast(`บันทึกลงชีตไม่สำเร็จ: ${msg}`, 'error');
+          void pull();
+        }
+      });
+      queue.current = job;
+      return job;
+    },
+    [applySnapshot, pull, toast],
+  );
+
+  /** ใช้ action แบบ optimistic: อัปเดตหน้าเว็บทันที แล้วเขียนลงชีตตามหลัง */
+  const commit = useCallback(
+    (fn: (d: IcuData) => ActionResult, okText?: string) => {
+      const { next, ops } = fn(dataRef.current);
+      dataRef.current = next;
+      setData(next);
+      return send(ops, okText);
+    },
+    [send],
+  );
+
+  const setConfig = useCallback((cfg: SheetConfig) => {
+    write(CONFIG_KEY, cfg);
+    configRef.current = cfg;
+    setConfigState(cfg);
+    if (!cfg.url) {
+      setMeta(null);
+      setError(null);
+    }
+  }, []);
+
+  const replaceLocal = useCallback((next: IcuData) => {
+    dataRef.current = next;
+    setData(next);
+  }, []);
+
+  return useMemo(
+    () => ({
+      data,
+      meta,
+      config,
+      state,
+      lastSync,
+      error,
+      toasts,
+      pollMs: POLL_MS,
+      envConfigured: !!ENV_CONFIG.url,
+      toast,
+      commit,
+      send,
+      pull,
+      setConfig,
+      replaceLocal,
+      applySnapshot,
+    }),
+    [data, meta, config, state, lastSync, error, toasts, toast, commit, send, pull, setConfig, replaceLocal, applySnapshot],
+  );
+}
+
+export type IcuStore = ReturnType<typeof useIcuStore>;
+
+export const StoreContext = createContext<IcuStore | null>(null);
+
+export const useStore = () => {
+  const s = useContext(StoreContext);
+  if (!s) throw new Error('StoreContext missing');
+  return s;
+};
