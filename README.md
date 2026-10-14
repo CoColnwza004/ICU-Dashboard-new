@@ -16,6 +16,7 @@
 | ภาพรวม | ผู้ป่วยขณะนี้ / อัตราครองเตียง / Ventilator / Critical, ผังเตียง ICU-01…04, สรุป 12 ตัวชี้วัดวันนี้, กราฟ 14 วัน |
 | 12 ตัวชี้วัด | ดูย้อนหลังรายวัน แก้ไขด้วยปุ่ม +/− หรือ “เติมจากผังเตียง”, กราฟแนวโน้ม 14/30/90 วัน, ตารางบันทึกรายวัน |
 | สถิติเตียง | กรอก/คำนวณ ADC, ALOS, BOR%, BTR, TOI รายเดือน (เติมค่าจากระบบให้อัตโนมัติ แก้เองได้) แล้วบันทึกลงแท็บ `Stats` · พิมพ์เป็น PDF |
+| เต็มจอ | ปุ่ม “โหมดเต็มจอ” (หรือเปิด `…/#wall`) สำหรับจอทีวี / แท็บเล็ตที่เคาน์เตอร์พยาบาล: เตียงทั้งหมด, ตัวเลขหลัก, 12 ตัวชี้วัด, สถิติเตียง, ความเคลื่อนไหวล่าสุด · อ่านอย่างเดียว · กันจอดับ · ซ่อนปุ่มเมื่อไม่ได้ใช้ |
 | รายเดือน | รับใหม่, Refer/ย้าย, เสียชีวิต, ADC/ALOS/BOR/BTR/TOI, Ventilator utilization, กราฟรายวัน, ทะเบียนเข้า–ออก · PDF/CSV มีค่าสถิติทั้งหมด |
 
 ### สูตรสถิติการใช้เตียง
@@ -88,6 +89,10 @@ npm install
 npm run dev      # http://localhost:3000
 npm run build    # ตรวจ type + build ไปที่ dist/
 ```
+
+**Cloudflare Pages:** Workers & Pages › Create › Pages › Connect to Git › เลือก repo นี้ › ตั้งค่า
+Framework preset: **Vite** (หรือ None) · Build command: `npm run build` · Build output directory: `dist` › Save and Deploy
+(ใช้ Node 22 ตามไฟล์ `.nvmrc` อัตโนมัติ · ลิงก์ชีตอยู่ในโค้ดแล้ว ไม่ต้องตั้ง Environment Variable)
 
 **Vercel:** Import repo นี้ → Framework: Vite (ตรวจจับอัตโนมัติ) → เพิ่ม Environment Variable `VITE_SHEETS_API_URL` (ถ้าต้องการ) → Deploy
 

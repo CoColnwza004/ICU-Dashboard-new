@@ -1,4 +1,4 @@
-import { ArrowUpRight, BedDouble, ChevronRight, Siren, Users, Wind } from 'lucide-react';
+import { ArrowUpRight, BedDouble, ChevronRight, Maximize, Siren, Users, Wind } from 'lucide-react';
 import { useMemo, type ReactNode } from 'react';
 import { DEVICES, EVENT_META, HOSPITAL, INDICATORS, STATUS_META, UNIT } from '../lib/constants';
 import { fmtDateLong, fmtDateShort, fmtDateTime, fmtDayMonth, shiftDate, todayKey } from '../lib/date';
@@ -9,6 +9,7 @@ import { sheetLink } from '../lib/sheetApi';
 import { useStore } from '../lib/store';
 import type { DailyKey } from '../types';
 import { BedCard } from './BedCard';
+import { enterFullscreen } from './WallView';
 import { SeriesChart } from './charts';
 import { Button, cx, Dot, Empty, SectionHeader } from './ui';
 import { AcuityBar, BedStrip, Delta, Ring, Sparkline } from './viz';
@@ -87,9 +88,22 @@ export function Overview({
               {HOSPITAL} · {total} เตียง · ผู้ป่วย {occ.length} ราย
             </p>
           </div>
-          <Button variant="primary" size="lg" onClick={onAdmit} disabled={free + cleaning === 0}>
-            รับผู้ป่วยใหม่
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="secondary"
+              size="lg"
+              onClick={() => {
+                void enterFullscreen();
+                onView('wall');
+              }}
+            >
+              <Maximize className="size-4" strokeWidth={1.8} />
+              โหมดเต็มจอ
+            </Button>
+            <Button variant="primary" size="lg" onClick={onAdmit} disabled={free + cleaning === 0}>
+              รับผู้ป่วยใหม่
+            </Button>
+          </div>
         </div>
 
         {/* Key figures */}

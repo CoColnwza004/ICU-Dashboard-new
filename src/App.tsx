@@ -7,6 +7,7 @@ import { Stats } from './components/Stats';
 import { PrintReport, type PrintJob } from './components/PrintReport';
 import { SettingsPanel } from './components/SettingsPanel';
 import { TopBar } from './components/TopBar';
+import { WallView } from './components/WallView';
 import { Toasts } from './components/ui';
 import { HOSPITAL } from './lib/constants';
 import { useHashView } from './lib/hooks';
@@ -38,6 +39,17 @@ export default function App() {
 
   const closeBed = useCallback(() => setBed(null), []);
   const closeSettings = useCallback(() => setSettings(false), []);
+
+  if (view === 'wall') {
+    return (
+      <StoreContext.Provider value={store}>
+        <div className="screen-only">
+          <WallView onExit={() => setView('overview')} />
+          <Toasts toasts={store.toasts} />
+        </div>
+      </StoreContext.Provider>
+    );
+  }
 
   return (
     <StoreContext.Provider value={store}>

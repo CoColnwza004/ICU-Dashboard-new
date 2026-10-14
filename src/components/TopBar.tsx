@@ -1,4 +1,5 @@
-import { Activity, CalendarDays, Gauge, LayoutGrid, Settings2, Sheet as SheetIcon } from 'lucide-react';
+import { Activity, CalendarDays, Gauge, LayoutGrid, Maximize, Settings2, Sheet as SheetIcon } from 'lucide-react';
+import { enterFullscreen } from './WallView';
 import { HOSPITAL } from '../lib/constants';
 import { relativeTime } from '../lib/date';
 import { useNow, type View } from '../lib/hooks';
@@ -6,7 +7,7 @@ import { sheetLink } from '../lib/sheetApi';
 import { useStore } from '../lib/store';
 import { cx, Dot, IconButton, Segmented } from './ui';
 
-const TABS: { value: View; label: string; icon: typeof Activity }[] = [
+const TABS: { value: Exclude<View, 'wall'>; label: string; icon: typeof Activity }[] = [
   { value: 'overview', label: 'ภาพรวม', icon: LayoutGrid },
   { value: 'indicators', label: '12 ตัวชี้วัด', icon: Activity },
   { value: 'stats', label: 'สถิติเตียง', icon: Gauge },
@@ -82,6 +83,15 @@ export function TopBar({ view, onView, onSettings }: { view: View; onView: (v: V
                 <SheetIcon className="size-[18px]" strokeWidth={1.6} />
               </a>
             )}
+            <IconButton
+              label="โหมดเต็มจอ (จอแสดงผล)"
+              onClick={() => {
+                void enterFullscreen();
+                onView('wall');
+              }}
+            >
+              <Maximize className="size-[18px]" strokeWidth={1.6} />
+            </IconButton>
             <IconButton label="เชื่อมต่อ Google Sheet / ตั้งค่า" onClick={onSettings}>
               <Settings2 className="size-[18px]" strokeWidth={1.6} />
             </IconButton>
