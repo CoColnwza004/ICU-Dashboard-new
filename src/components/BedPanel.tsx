@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { ArrowLeftRight } from 'lucide-react';
+import { ArrowLeftRight, Check } from 'lucide-react';
 import type { Acuity, Bed, Gender, OutEvent } from '../types';
 import { ACUITIES, ACUITY_META, AGE_GROUPS, DEVICES } from '../lib/constants';
 import { fmtDateTime, toLocalDateTime } from '../lib/date';
@@ -198,6 +198,24 @@ export function BedPanel({ bedNumber, onClose }: { bedNumber: string | null; onC
         </div>
       ) : (
         <div className="space-y-7">
+          {mode === 'admit' && data.beds.find((b) => b.bedNumber === target)?.status === 'cleaning' && (
+            <div className="well flex flex-wrap items-center justify-between gap-3 p-4">
+              <p className="text-[14px] text-ink-2">
+                เตียง <span className="num font-medium text-ink">{target}</span> ยังรอทำความสะอาด
+              </p>
+              <button
+                type="button"
+                onClick={() =>
+                  void commit((d) => updateBed(d, target, { status: 'available' }), `${target} ทำความสะอาดเสร็จ · พร้อมรับผู้ป่วย`)
+                }
+                className="inline-flex h-9 items-center gap-1.5 rounded-full bg-good px-4 text-[13px] font-medium text-white transition-[filter] hover:brightness-105"
+              >
+                <Check className="size-4" strokeWidth={2.4} />
+                ทำความสะอาดเสร็จ
+              </button>
+            </div>
+          )}
+
           {mode === 'admit' && (
             <Group title="เตียง">
               <div className="flex flex-wrap gap-2">

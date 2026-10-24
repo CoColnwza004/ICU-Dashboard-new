@@ -184,7 +184,7 @@ export function Overview({
               sheetHref={sheetLink(meta, 'beds', b.row)}
               onOpen={() => onOpenBed(b.bedNumber)}
               onMarkReady={() =>
-                void commit((d) => updateBed(d, b.bedNumber, { status: 'available' }), `${b.bedNumber} พร้อมใช้งาน`)
+                void commit((d) => updateBed(d, b.bedNumber, { status: 'available' }), `${b.bedNumber} ทำความสะอาดเสร็จ · พร้อมรับผู้ป่วย`)
               }
             />
           ))}

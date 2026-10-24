@@ -1,8 +1,8 @@
-import { ArrowUpRight } from 'lucide-react';
+import { ArrowUpRight, Check } from 'lucide-react';
 import type { Bed } from '../types';
 import { ACUITY_META, DEVICES, STATUS_META } from '../lib/constants';
 import { DEVICE_ICON } from '../lib/icons';
-import { daysBetween } from '../lib/date';
+import { daysBetween, fmtDateTime } from '../lib/date';
 import { cx, Dot } from './ui';
 
 export function BedCard({
@@ -110,7 +110,9 @@ export function BedCard({
       ) : (
         <div className="pointer-events-none relative mt-5 flex flex-1 flex-col justify-end">
           <p className="pointer-events-none text-[13px] text-ink-3">
-            {bed.status === 'available' ? 'พร้อมรับผู้ป่วยใหม่' : 'รอทำความสะอาดและเตรียมเตียง'}
+            {bed.status === 'available'
+              ? 'พร้อมรับผู้ป่วยใหม่'
+              : `รอทำความสะอาด${bed.updatedAt ? ` · ตั้งแต่ ${fmtDateTime(bed.updatedAt)}` : ''}`}
           </p>
           {bed.status === 'available' ? (
             <span className="btn-ink pointer-events-none mt-3 inline-flex h-9 w-fit items-center rounded-full px-4 text-[13px] font-medium transition-opacity group-hover:opacity-90">
@@ -120,9 +122,10 @@ export function BedCard({
             <button
               type="button"
               onClick={onMarkReady}
-              className="btn-glass pointer-events-auto relative mt-3 inline-flex h-9 w-fit items-center rounded-full px-4 text-[13px] font-medium"
+              className="pointer-events-auto relative mt-3 inline-flex h-10 w-fit items-center gap-1.5 rounded-full bg-good px-4 text-[13px] font-medium text-white shadow-[inset_0_1px_0_rgb(255_255_255/0.3),0_6px_16px_-8px_rgb(12_163_12/0.7)] transition-[filter,transform] hover:brightness-105 active:scale-[0.97]"
             >
-              พร้อมใช้งาน
+              <Check className="size-4" strokeWidth={2.4} />
+              ทำความสะอาดเสร็จ
             </button>
           )}
         </div>
