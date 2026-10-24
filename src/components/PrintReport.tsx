@@ -3,19 +3,58 @@ import { fmtDateLong, fmtDateShort, fmtDateTime, fmtDayMonth, fmtMonth, shiftDat
 import { countsFromBeds, emptyDaily, findDaily, monthlySummary } from '../lib/logic';
 import { computeStats, fmtStat, STAT_DEFS, statsFor } from '../lib/stats';
 import { useStore } from '../lib/store';
-import { SeriesChart } from './charts';
+import { admitAcuitySlices, bedAcuitySlices, bedStatusSlices, dischargeSlices, sumSlices } from '../lib/breakdowns';
+import { DonutChart, SeriesChart, type Slice } from './charts';
 
 export type PrintJob = { kind: 'daily'; date: string } | { kind: 'monthly'; ym: string } | { kind: 'stats'; ym: string };
 
 const th = 'border-b border-black/20 py-1.5 pr-2 text-left text-[10px] font-semibold text-black/60';
 const td = 'border-b border-black/10 py-1.5 pr-2 text-[11px]';
 
-export function PrintReport({ job }: { job: PrintJob }) {
+export const pdfFilename = (job: PrintJob) =>
+  job.kind === 'daily'
+    ? `ICU-daily-report-${job.date}.pdf`
+    : job.kind === 'stats'
+      ? `ICU-bed-stats-${job.ym}.pdf`
+      : `ICU-monthly-report-${job.ym}.pdf`;
+// ชื่อไฟล์เป็นภาษาอังกฤษ: บางเบราว์เซอร์/มือถือไม่รับชื่อไฟล์ภาษาไทยและจะตั้งชื่อเป็น "download"
+
+/** สีตัวอักษรในรายงานเป็นโทนสว่างเสมอ (แม้เครื่องจะใช้โหมดมืด) */
+const LIGHT_VARS = {
+  '--color-ink': '#000000',
+  '--color-ink-2': '#333333',
+  '--color-ink-3': '#666666',
+  '--color-surface': '#ffffff',
+  '--color-line': '#e5e5ea',
+  '--color-fill': '#e8e8ed',
+  color: '#000',
+  background: '#fff',
+} as React.CSSProperties;
+
+function PieRow({ items }: { items: { title: string; slices: Slice[]; unit?: string; center: string }[] }) {
+  return (
+    <section className="mb-6 break-inside-avoid">
+      <div className="grid grid-cols-3 gap-4">
+        {items.map((it) => (
+          <div key={it.title} className="rounded-lg border border-black/15 p-3">
+            <p className="mb-2 text-[11px] font-semibold">{it.title}</p>
+            <DonutChart printWidth={1} size={96} slices={it.slices} unit={it.unit} centerLabel={it.center} />
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+export function PrintReport({ job, mode = 'print' }: { job: PrintJob; mode?: 'print' | 'pdf' }) {
   const { data } = useStore();
   const printed = new Date().toLocaleString('th-TH-u-ca-gregory', { dateStyle: 'medium', timeStyle: 'short' });
 
   return (
-    <div className="print-only text-black" style={{ fontFamily: 'var(--font-sans)' }}>
+    <div
+      className={mode === 'print' ? 'print-only text-black' : 'text-black'}
+      style={{ fontFamily: 'var(--font-sans)', ...LIGHT_VARS, ...(mode === 'pdf' ? { padding: '4px 2px' } : {}) }}
+    >
       <header className="mb-6 flex items-end justify-between border-b border-black pb-3">
         <div>
           <p className="text-[11px] text-black/60">
@@ -86,6 +125,15 @@ export function PrintReport({ job }: { job: PrintJob }) {
           />
         </section>
 
+        {date === todayKey() && (
+          <PieRow
+            items={[
+              { title: 'สถานะเตียงขณะพิมพ์', slices: bedStatusSlices(data.beds), unit: 'เตียง', center: 'เตียง' },
+              { title: 'ความรุนแรงของผู้ป่วยขณะนี้', slices: bedAcuitySlices(data.beds), center: 'ผู้ป่วย' },
+              { title: 'เหตุการณ์วันนี้', slices: sumSlices([rec], ['admittedNew', 'referCount', 'deathCount']), center: 'ครั้ง' },
+            ]}
+          />
+        )}
         {date === todayKey() && (
           <section className="break-inside-avoid">
             <h2 className="mb-2 text-[13px] font-semibold">สถานะเตียงขณะพิมพ์</h2>
@@ -236,6 +284,19 @@ export function PrintReport({ job }: { job: PrintJob }) {
           ))}
         </section>
         <StatsBlock ym={ym} />
+        <h2 className="mb-2 text-[13px] font-semibold">สัดส่วน</h2>
+        <PieRow
+          items={[
+            { title: 'ประเภทการจำหน่าย', slices: dischargeSlices(s.logs), center: 'จำหน่าย' },
+            { title: 'ความรุนแรงเมื่อรับเข้า', slices: admitAcuitySlices(s.logs), center: 'รับเข้า' },
+            {
+              title: 'อุปกรณ์ (ผู้ป่วย-วัน)',
+              slices: sumSlices(s.days, ['ventilatorCount', 'cLineCount', 'foleyCount', 'ivHlCount']),
+              unit: 'ผู้ป่วย-วัน',
+              center: 'ผู้ป่วย-วัน',
+            },
+          ]}
+        />
         {s.days.length > 0 && (
           <section className="mb-6 break-inside-avoid">
             <h2 className="mb-2 text-[13px] font-semibold">รับเข้า–ออก และผู้ป่วยในวอร์ดรายวัน</h2>

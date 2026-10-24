@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import type { Acuity, Bed, Gender, LogEvent } from '../types';
+import { ArrowLeftRight } from 'lucide-react';
+import type { Acuity, Bed, Gender, OutEvent } from '../types';
 import { ACUITIES, ACUITY_META, AGE_GROUPS, DEVICES } from '../lib/constants';
 import { fmtDateTime, toLocalDateTime } from '../lib/date';
-import { admitPatient, dischargePatient, emptyPatient, updateBed, type PatientInput } from '../lib/logic';
+import { admitPatient, dischargePatient, emptyPatient, movePatient, updateBed, type PatientInput } from '../lib/logic';
 import { useStore } from '../lib/store';
 import { Button, cx, Dot, Modal, Segmented, Switch } from './ui';
 
 type Mode = 'admit' | 'edit';
-type OutEvent = Exclude<LogEvent, 'admit'>;
+type Pane = 'form' | 'out' | 'move';
 
 const OUT_OPTIONS: { value: OutEvent; label: string }[] = [
   { value: 'home', label: 'กลับบ้าน' },
@@ -47,7 +48,9 @@ export function BedPanel({ bedNumber, onClose }: { bedNumber: string | null; onC
 
   const [target, setTarget] = useState('');
   const [form, setForm] = useState<PatientInput>(emptyPatient());
-  const [outOpen, setOutOpen] = useState(false);
+  const [pane, setPane] = useState<Pane>('form');
+  const [moveTo, setMoveTo] = useState('');
+  const [moveNote, setMoveNote] = useState('');
   const [outEvent, setOutEvent] = useState<OutEvent>('home');
   const [outNote, setOutNote] = useState('');
 
@@ -56,7 +59,9 @@ export function BedPanel({ bedNumber, onClose }: { bedNumber: string | null; onC
     if (!bedNumber) return;
     const b = data.beds.find((x) => x.bedNumber === bedNumber) ?? null;
     setTarget(bedNumber);
-    setOutOpen(false);
+    setPane('form');
+    setMoveTo('');
+    setMoveNote('');
     setOutEvent('home');
     setOutNote('');
     if (b?.status === 'occupied') setForm(toForm(b));
@@ -82,6 +87,12 @@ export function BedPanel({ bedNumber, onClose }: { bedNumber: string | null; onC
     onClose();
   };
 
+  const move = () => {
+    if (!moveTo) return;
+    void commit((d) => movePatient(d, target, moveTo, moveNote), `ย้ายผู้ป่วย ${target} → ${moveTo} แล้ว`);
+    onClose();
+  };
+
   const open = !!bedNumber;
 
   return (
@@ -95,12 +106,18 @@ export function BedPanel({ bedNumber, onClose }: { bedNumber: string | null; onC
           : `รับเข้า ${fmtDateTime(bed?.admittedAt ?? '')} · ${bed?.caseCode || 'ไม่ระบุรหัสเคส'}`
       }
       footer={
-        outOpen ? null : (
+        pane !== 'form' ? null : (
           <>
             {mode === 'edit' && (
-              <Button variant="danger" className="mr-auto" onClick={() => setOutOpen(true)}>
-                จำหน่าย / ย้าย
-              </Button>
+              <div className="mr-auto flex flex-wrap gap-2">
+                <Button variant="danger" onClick={() => setPane('out')}>
+                  จำหน่าย
+                </Button>
+                <Button variant="secondary" onClick={() => setPane('move')} disabled={freeBeds.length === 0}>
+                  <ArrowLeftRight className="size-4" strokeWidth={1.8} />
+                  ย้ายเตียง
+                </Button>
+              </div>
             )}
             <Button variant="ghost" onClick={onClose}>
               ยกเลิก
@@ -112,7 +129,49 @@ export function BedPanel({ bedNumber, onClose }: { bedNumber: string | null; onC
         )
       }
     >
-      {outOpen ? (
+      {pane === 'move' ? (
+        <div className="animate-rise space-y-5 pb-2">
+          <p className="text-[15px] text-ink-2">
+            ย้ายผู้ป่วย <span className="font-medium text-ink">{bed?.caseCode || 'ไม่ระบุรหัสเคส'}</span> จากเตียง {target} ไปที่
+            <br />
+            <span className="text-[13px] text-ink-3">
+              ข้อมูลผู้ป่วย อุปกรณ์ และวันที่รับเข้าเดิมจะย้ายไปด้วย · เตียง {target} จะเปลี่ยนเป็น “ทำความสะอาด” · บันทึกลงทะเบียน (Log)
+              อัตโนมัติ
+            </span>
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {freeBeds.length === 0 && <p className="text-[14px] text-ink-3">ไม่มีเตียงว่างให้ย้าย</p>}
+            {freeBeds.map((b) => (
+              <button
+                key={b.bedNumber}
+                type="button"
+                onClick={() => setMoveTo(b.bedNumber)}
+                className={cx(
+                  'num h-11 rounded-full px-5 text-[15px] font-medium transition-colors',
+                  moveTo === b.bedNumber ? 'btn-ink' : 'btn-glass text-ink-2 hover:text-ink',
+                )}
+              >
+                {b.bedNumber}
+                {b.status === 'cleaning' && <span className="ml-1.5 text-[11px] opacity-60">ทำความสะอาด</span>}
+              </button>
+            ))}
+          </div>
+          <textarea
+            className="field min-h-20"
+            placeholder="เหตุผล (ถ้ามี) เช่น ย้ายเข้าห้องแยกโรค / ใกล้เคาน์เตอร์พยาบาล"
+            value={moveNote}
+            onChange={(e) => setMoveNote(e.target.value)}
+          />
+          <div className="flex flex-wrap justify-end gap-2">
+            <Button variant="ghost" onClick={() => setPane('form')}>
+              ย้อนกลับ
+            </Button>
+            <Button variant="primary" onClick={move} disabled={!moveTo}>
+              {moveTo ? `ยืนยันย้าย ${target} → ${moveTo}` : 'เลือกเตียงปลายทาง'}
+            </Button>
+          </div>
+        </div>
+      ) : pane === 'out' ? (
         <div className="animate-rise space-y-5 pb-2">
           <p className="text-[15px] text-ink-2">
             จำหน่ายผู้ป่วย <span className="font-medium text-ink">{bed?.caseCode}</span> ออกจากเตียง {target}
@@ -129,7 +188,7 @@ export function BedPanel({ bedNumber, onClose }: { bedNumber: string | null; onC
             onChange={(e) => setOutNote(e.target.value)}
           />
           <div className="flex flex-wrap justify-end gap-2">
-            <Button variant="ghost" onClick={() => setOutOpen(false)}>
+            <Button variant="ghost" onClick={() => setPane('form')}>
               ย้อนกลับ
             </Button>
             <Button variant={outEvent === 'expired' ? 'danger' : 'primary'} onClick={discharge}>

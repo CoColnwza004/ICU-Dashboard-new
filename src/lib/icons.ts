@@ -1,5 +1,6 @@
 import {
   Ambulance,
+  ArrowLeftRight,
   ArrowRightLeft,
   Bandage,
 
@@ -51,5 +52,6 @@ export const EVENT_ICON: Record<LogEvent, LucideIcon> = {
   ward: ArrowRightLeft,
   refer: Ambulance,
   expired: HeartCrack,
+  move: ArrowLeftRight,
 };
 

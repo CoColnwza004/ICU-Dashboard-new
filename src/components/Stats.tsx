@@ -1,4 +1,4 @@
-import { ArrowUpRight, BedDouble, CalendarDays, Hotel, LogOut, RefreshCw } from 'lucide-react';
+import { ArrowUpRight, BedDouble, CalendarDays, Download, Hotel, LogOut, Printer, RefreshCw } from 'lucide-react';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { fmtMonth } from '../lib/date';
 import { availableMonths, saveStats } from '../lib/logic';
@@ -15,7 +15,15 @@ const FIELDS: { key: keyof StatsInput; label: string; hint: string; icon: ReactN
   { key: 'discharges', label: 'ผู้ป่วยจำหน่าย', hint: 'กลับบ้าน + ย้าย + Refer + เสียชีวิต', icon: <LogOut className="size-4" strokeWidth={1.7} /> },
 ];
 
-export function Stats({ onPrint }: { onPrint: (ym: string) => void }) {
+export function Stats({
+  onPrint,
+  onPdf,
+  pdfBusy,
+}: {
+  onPrint: (ym: string) => void;
+  onPdf: (ym: string) => void;
+  pdfBusy: boolean;
+}) {
   const { data, meta, commit } = useStore();
   const months = useMemo(() => {
     const set = new Set(availableMonths(data));
@@ -85,9 +93,14 @@ export function Stats({ onPrint }: { onPrint: (ym: string) => void }) {
                 </option>
               ))}
             </select>
-            <Button variant="secondary" onClick={() => onPrint(ym)}>
-              พิมพ์ / PDF
+            <Button variant="ghost" onClick={() => onPrint(ym)}>
+              <Printer className="size-4" strokeWidth={1.8} />
+              พิมพ์
             </Button>
+            <Button variant="secondary" onClick={() => onPdf(ym)} disabled={pdfBusy}>
+                  <Download className="size-4" strokeWidth={1.8} />
+                  {pdfBusy ? 'กำลังสร้าง PDF…' : 'บันทึก PDF'}
+                </Button>
           </div>
         </div>
       </section>

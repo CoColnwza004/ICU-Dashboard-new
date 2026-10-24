@@ -9,9 +9,10 @@ import type {
   IcuData,
   LogEntry,
   LogEvent,
+  OutEvent,
   SheetOp,
 } from '../types';
-import { ACUITIES, DEFAULT_BEDS, DEVICES, INDICATORS } from './constants';
+import { ACUITIES, DEFAULT_BEDS, DEVICES, EVENT_META, INDICATORS } from './constants';
 import { normalizeDateKey, parseLocalDateTime, shiftDate, toLocalDateTime, todayKey } from './date';
 
 /* ------------------------------------------------------------------ */
@@ -112,6 +113,8 @@ const EVENT_ALIASES: Record<string, LogEvent> = {
   ส่งต่อ: 'refer',
   expired: 'expired',
   เสียชีวิต: 'expired',
+  move: 'move',
+  ย้ายเตียง: 'move',
 };
 
 type Raw = Record<string, unknown>;
@@ -278,7 +281,7 @@ export const updateBed = (data: IcuData, bedNumber: string, patch: Partial<Bed>)
 export const dischargePatient = (
   data: IcuData,
   bedNumber: string,
-  event: Exclude<LogEvent, 'admit'>,
+  event: OutEvent,
   note: string,
 ): ActionResult => {
   const prev = data.beds.find((b) => b.bedNumber === bedNumber);
@@ -300,6 +303,32 @@ export const dischargePatient = (
   return {
     next: { ...data, beds, daily: today.daily, logs: [...data.logs, entry] },
     ops: [bedOp(bed), today.op, { type: 'appendLog', entry }],
+  };
+};
+
+/** ย้ายผู้ป่วยไปเตียงอื่น: ข้อมูลผู้ป่วยตามไปทั้งหมด (วันที่รับเข้าเดิม) เตียงเดิมเปลี่ยนเป็น "ทำความสะอาด" */
+export const movePatient = (data: IcuData, from: string, to: string, note: string): ActionResult => {
+  const src = data.beds.find((b) => b.bedNumber === from);
+  const dst = data.beds.find((b) => b.bedNumber === to);
+  if (!src || src.status !== 'occupied' || !dst || dst.status === 'occupied' || from === to) return { next: data, ops: [] };
+  const now = toLocalDateTime();
+  const moved: Bed = { ...src, bedNumber: to, row: dst.row, status: 'occupied', updatedAt: now };
+  const vacated: Bed = { ...emptyBed(from), row: src.row, status: 'cleaning', updatedAt: now };
+  const beds = putBed(putBed(data.beds, moved), vacated);
+  const entry: LogEntry = {
+    timestamp: now,
+    event: 'move',
+    bedNumber: to,
+    caseCode: src.caseCode,
+    acuity: src.acuity,
+    admittedAt: src.admittedAt,
+    note: [`ย้ายจาก ${from} → ${to}`, note].filter(Boolean).join(' · '),
+  };
+  // ส่งชื่อเหตุการณ์เป็นภาษาไทย ให้สคริปต์ทุกเวอร์ชันเขียนลงชีตได้ถูกต้อง
+  const sheetEntry = { ...entry, event: EVENT_META.move.label } as unknown as LogEntry;
+  return {
+    next: { ...data, beds, logs: [...data.logs, entry] },
+    ops: [bedOp(vacated), bedOp(moved), { type: 'appendLog', entry: sheetEntry }],
   };
 };
 
@@ -349,7 +378,7 @@ export const monthlySummary = (data: IcuData, ym: string) => {
   const logs = data.logs
     .filter((l) => l.timestamp.startsWith(ym))
     .sort((a, b) => b.timestamp.localeCompare(a.timestamp));
-  const outs = logs.filter((l) => l.event !== 'admit');
+  const outs = logs.filter((l) => EVENT_META[l.event].out);
   const stays = outs
     .map((l) => {
       const a = parseLocalDateTime(l.admittedAt);

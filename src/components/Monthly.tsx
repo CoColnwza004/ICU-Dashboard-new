@@ -1,4 +1,4 @@
-import { Activity, Ambulance, ArrowUpRight, BedDouble, ChevronRight, Clock, HeartCrack, Repeat, Timer, UserPlus, Wind } from 'lucide-react';
+import { Activity, Download, Printer, Ambulance, ArrowUpRight, BedDouble, ChevronRight, Clock, HeartCrack, Repeat, Timer, UserPlus, Wind } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { EVENT_META, INDICATORS } from '../lib/constants';
 import { fmtDateLong, fmtDateShort, fmtDateTime, fmtDayMonth, fmtMonth, parseLocalDateTime } from '../lib/date';
@@ -7,7 +7,8 @@ import { sheetLink } from '../lib/sheetApi';
 import { fmtStat, STAT_DEFS, statsFor } from '../lib/stats';
 import { useStore } from '../lib/store';
 import type { IcuData } from '../types';
-import { SeriesChart } from './charts';
+import { admitAcuitySlices, dischargeSlices, sumSlices } from '../lib/breakdowns';
+import { CHART_TYPES, DonutChart, SeriesChart, type ChartType } from './charts';
 import { Button, Dot, Empty, Segmented } from './ui';
 
 type Filter = 'all' | 'in' | 'out';
@@ -37,20 +38,29 @@ export const downloadMonthCsv = (data: IcuData, ym: string) => {
   const blob = new Blob(['﻿' + lines.join('\n')], { type: 'text/csv;charset=utf-8' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = `ICU-รายงาน-${ym}.csv`;
+  a.download = `ICU-monthly-${ym}.csv`;
   a.click();
   URL.revokeObjectURL(a.href);
 };
 
-export function Monthly({ onPrint }: { onPrint: (ym: string) => void }) {
+export function Monthly({
+  onPrint,
+  onPdf,
+  pdfBusy,
+}: {
+  onPrint: (ym: string) => void;
+  onPdf: (ym: string) => void;
+  pdfBusy: boolean;
+}) {
   const { data, meta } = useStore();
   const months = useMemo(() => availableMonths(data), [data]);
   const [ym, setYm] = useState(months[0]);
   const [filter, setFilter] = useState<Filter>('all');
+  const [chartType, setChartType] = useState<ChartType>('auto');
   const s = useMemo(() => monthlySummary(data, ym), [data, ym]);
   const st = useMemo(() => statsFor(data, ym), [data, ym]);
 
-  const logs = s.logs.filter((l) => filter === 'all' || (filter === 'in' ? l.event === 'admit' : l.event !== 'admit'));
+  const logs = s.logs.filter((l) => filter === 'all' || (filter === 'in' ? l.event === 'admit' : EVENT_META[l.event].out));
 
   const figures = [
     { label: 'รับใหม่', value: s.admissions, unit: 'ราย', Icon: UserPlus },
@@ -92,9 +102,14 @@ export function Monthly({ onPrint }: { onPrint: (ym: string) => void }) {
             <Button variant="secondary" onClick={() => downloadMonthCsv(data, ym)}>
               CSV
             </Button>
-            <Button variant="primary" onClick={() => onPrint(ym)}>
-              พิมพ์ / PDF
+            <Button variant="ghost" onClick={() => onPrint(ym)}>
+              <Printer className="size-4" strokeWidth={1.8} />
+              พิมพ์
             </Button>
+            <Button variant="primary" onClick={() => onPdf(ym)} disabled={pdfBusy}>
+                  <Download className="size-4" strokeWidth={1.8} />
+                  {pdfBusy ? 'กำลังสร้าง PDF…' : 'บันทึก PDF'}
+                </Button>
           </div>
         </div>
 
@@ -126,12 +141,23 @@ export function Monthly({ onPrint }: { onPrint: (ym: string) => void }) {
       </section>
 
       <section className="card p-6 sm:p-8">
-        <p className="eyebrow">รายวัน</p>
-        <h3 className="display mt-1 mb-6 text-[22px]">รับเข้า–ออก และผู้ป่วยในวอร์ด</h3>
+        <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <p className="eyebrow">รายวัน</p>
+            <h3 className="display mt-1 text-[22px]">
+              รับเข้า–ออก และผู้ป่วยในวอร์ด
+              {chartType === 'pie' && <span className="text-ink-3"> · สัดส่วนทั้งเดือน</span>}
+            </h3>
+          </div>
+          <Segmented options={CHART_TYPES} value={chartType} onChange={setChartType} size="sm" label="รูปแบบกราฟ" />
+        </div>
         {s.days.length === 0 ? (
           <Empty title="ยังไม่มีข้อมูลรายวันในเดือนนี้" />
+        ) : chartType === 'pie' ? (
+          <DonutChart size={240} centerLabel="เหตุการณ์" slices={sumSlices(s.days, ['admittedNew', 'referCount', 'deathCount'])} />
         ) : (
           <SeriesChart
+            mode={chartType}
             data={s.days}
             xKey="date"
             series={[
@@ -145,6 +171,31 @@ export function Monthly({ onPrint }: { onPrint: (ym: string) => void }) {
             labelFormat={fmtDateLong}
           />
         )}
+      </section>
+
+      {/* สัดส่วน (แผนภูมิวงกลม) */}
+      <section>
+        <p className="eyebrow">สัดส่วน · {fmtMonth(ym)}</p>
+        <h2 className="display mt-1 mb-5 text-[24px] sm:text-[28px]">สรุปแบบแผนภูมิวงกลม</h2>
+        <div className="grid gap-4 lg:grid-cols-3">
+          <div className="card p-6">
+            <h3 className="mb-4 text-[15px] font-semibold">ประเภทการจำหน่าย</h3>
+            <DonutChart size={170} centerLabel="จำหน่าย" slices={dischargeSlices(s.logs)} />
+          </div>
+          <div className="card p-6">
+            <h3 className="mb-4 text-[15px] font-semibold">ความรุนแรงเมื่อรับเข้า</h3>
+            <DonutChart size={170} centerLabel="รับเข้า" slices={admitAcuitySlices(s.logs)} />
+          </div>
+          <div className="card p-6">
+            <h3 className="mb-4 text-[15px] font-semibold">อุปกรณ์ (ผู้ป่วย-วัน)</h3>
+            <DonutChart
+              size={170}
+              unit="ผู้ป่วย-วัน"
+              centerLabel="ผู้ป่วย-วัน"
+              slices={sumSlices(s.days, ['ventilatorCount', 'cLineCount', 'foleyCount', 'ivHlCount'])}
+            />
+          </div>
+        </div>
       </section>
 
       <section className="card overflow-hidden">
@@ -192,7 +243,7 @@ export function Monthly({ onPrint }: { onPrint: (ym: string) => void }) {
                 {logs.map((l, idx) => {
                   const a = parseLocalDateTime(l.admittedAt);
                   const b = parseLocalDateTime(l.timestamp);
-                  const los = l.event !== 'admit' && a && b ? Math.max(0, (b.getTime() - a.getTime()) / 86_400_000) : null;
+                  const los = EVENT_META[l.event].out && a && b ? Math.max(0, (b.getTime() - a.getTime()) / 86_400_000) : null;
                   return (
                     <tr key={`${l.row ?? idx}-${l.timestamp}`} className="border-b border-line transition-colors last:border-0 hover:bg-fill-soft">
                       <td className="py-3 pr-3 pl-6 whitespace-nowrap text-ink-2 sm:pl-8">{fmtDateTime(l.timestamp)}</td>

@@ -1,4 +1,4 @@
-import { ArrowUpRight, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ArrowUpRight, ChevronLeft, ChevronRight, Download, Printer } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import type { DailyRecord } from '../types';
 import { INDICATORS, type IndicatorGroup } from '../lib/constants';
@@ -7,7 +7,8 @@ import { INDICATOR_ICON } from '../lib/icons';
 import { countsFromBeds, emptyDaily, findDaily, saveDaily } from '../lib/logic';
 import { sheetLink } from '../lib/sheetApi';
 import { useStore } from '../lib/store';
-import { SeriesChart, type SeriesDef } from './charts';
+import { sumSlices } from '../lib/breakdowns';
+import { CHART_TYPES, DonutChart, SeriesChart, type ChartType, type SeriesDef } from './charts';
 import { Button, cx, Empty, IconButton, Segmented, Stepper } from './ui';
 
 const GROUPS: { value: IndicatorGroup; label: string; title: string }[] = [
@@ -43,7 +44,15 @@ const RANGES = [
   { value: '90', label: '90 วัน' },
 ] as const;
 
-export function Indicators({ onPrint }: { onPrint: (date: string) => void }) {
+export function Indicators({
+  onPrint,
+  onPdf,
+  pdfBusy,
+}: {
+  onPrint: (date: string) => void;
+  onPdf: (date: string) => void;
+  pdfBusy: boolean;
+}) {
   const { data, meta, commit } = useStore();
   const today = todayKey();
   const [date, setDate] = useState(today);
@@ -51,6 +60,7 @@ export function Indicators({ onPrint }: { onPrint: (date: string) => void }) {
   const [draft, setDraft] = useState<DailyRecord>(emptyDaily(today));
   const [group, setGroup] = useState<IndicatorGroup>('flow');
   const [range, setRange] = useState<(typeof RANGES)[number]['value']>('14');
+  const [chartType, setChartType] = useState<ChartType>('auto');
 
   const stored = findDaily(data.daily, date);
   const record: DailyRecord = stored ?? {
@@ -168,8 +178,13 @@ export function Indicators({ onPrint }: { onPrint: (date: string) => void }) {
               </>
             ) : (
               <>
-                <Button variant="secondary" onClick={() => onPrint(date)}>
-                  พิมพ์ / PDF
+                <Button variant="ghost" onClick={() => onPrint(date)}>
+                  <Printer className="size-4" strokeWidth={1.8} />
+                  พิมพ์
+                </Button>
+                <Button variant="secondary" onClick={() => onPdf(date)} disabled={pdfBusy}>
+                  <Download className="size-4" strokeWidth={1.8} />
+                  {pdfBusy ? 'กำลังสร้าง PDF…' : 'บันทึก PDF'}
                 </Button>
                 <Button variant="primary" onClick={startEdit}>
                   แก้ไข
@@ -241,14 +256,46 @@ export function Indicators({ onPrint }: { onPrint: (date: string) => void }) {
         <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
           <div>
             <p className="eyebrow">แนวโน้ม</p>
-            <h3 className="display mt-1 text-[22px]">{GROUPS.find((g) => g.value === group)?.title}</h3>
+            <h3 className="display mt-1 text-[22px]">
+              {GROUPS.find((g) => g.value === group)?.title}
+              {chartType === 'pie' && <span className="text-ink-3"> · สัดส่วนรวม {range} วัน</span>}
+            </h3>
           </div>
           <div className="flex flex-wrap gap-2">
             <Segmented options={GROUPS} value={group} onChange={setGroup} size="sm" label="กลุ่มตัวชี้วัด" />
             <Segmented options={[...RANGES]} value={range} onChange={setRange} size="sm" label="ช่วงเวลา" />
+            <Segmented options={CHART_TYPES} value={chartType} onChange={setChartType} size="sm" label="รูปแบบกราฟ" />
           </div>
         </div>
-        <SeriesChart data={trend} xKey="date" series={SERIES[group]} height={320} xFormat={fmtDayMonth} labelFormat={fmtDateLong} />
+        {chartType === 'pie' ? (
+          <div className="py-2">
+            <DonutChart
+              size={240}
+              centerLabel={group === 'flow' ? 'เหตุการณ์' : 'ผู้ป่วย-วัน'}
+              unit={group === 'flow' ? 'ราย' : 'ผู้ป่วย-วัน'}
+              slices={sumSlices(
+                trend,
+                // ผู้ป่วยในวอร์ดเป็นยอดคงค้าง ไม่ใช่เหตุการณ์ จึงไม่นำมารวมในวงกลม
+                SERIES[group].map((x) => x.key as keyof DailyRecord).filter((k) => k !== 'totalInWard') as Parameters<typeof sumSlices>[1],
+              )}
+            />
+            <p className="mt-4 text-[12px] text-ink-3">
+              {group === 'flow'
+                ? 'รวมจำนวนครั้งในช่วงที่เลือก (ไม่รวมยอดผู้ป่วยคงค้างในวอร์ด)'
+                : 'รวมผู้ป่วย-วันในช่วงที่เลือก เช่น Ventilator 10 = ผู้ป่วยใช้เครื่องรวม 10 วัน'}
+            </p>
+          </div>
+        ) : (
+          <SeriesChart
+            data={trend}
+            xKey="date"
+            series={SERIES[group]}
+            mode={chartType}
+            height={320}
+            xFormat={fmtDayMonth}
+            labelFormat={fmtDateLong}
+          />
+        )}
       </section>
 
       {/* Table */}

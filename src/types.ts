@@ -48,7 +48,9 @@ export interface DailyRecord extends Record<DailyKey, number> {
   row?: number;
 }
 
-export type LogEvent = 'admit' | 'home' | 'ward' | 'refer' | 'expired';
+export type LogEvent = 'admit' | 'home' | 'ward' | 'refer' | 'expired' | 'move';
+/** เหตุการณ์ที่ผู้ป่วยออกจาก ICU */
+export type OutEvent = 'home' | 'ward' | 'refer' | 'expired';
 
 export interface LogEntry {
   timestamp: string;

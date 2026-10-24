@@ -1,5 +1,5 @@
 import { ArrowUpRight, BedDouble, ChevronRight, Maximize, Siren, Users, Wind } from 'lucide-react';
-import { useMemo, type ReactNode } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { DEVICES, EVENT_META, HOSPITAL, INDICATORS, STATUS_META, UNIT } from '../lib/constants';
 import { fmtDateLong, fmtDateShort, fmtDateTime, fmtDayMonth, shiftDate, todayKey } from '../lib/date';
 import { useNow, type View } from '../lib/hooks';
@@ -10,8 +10,9 @@ import { useStore } from '../lib/store';
 import type { DailyKey } from '../types';
 import { BedCard } from './BedCard';
 import { enterFullscreen } from './WallView';
-import { SeriesChart } from './charts';
-import { Button, cx, Dot, Empty, SectionHeader } from './ui';
+import { bedAcuitySlices, bedStatusSlices } from '../lib/breakdowns';
+import { CHART_TYPES, DonutChart, SeriesChart, type ChartType } from './charts';
+import { Button, cx, Dot, Empty, SectionHeader, Segmented } from './ui';
 import { AcuityBar, BedStrip, Delta, Ring, Sparkline } from './viz';
 
 export function Overview({
@@ -68,6 +69,7 @@ export function Overview({
     [data.logs],
   );
 
+  const [chartType, setChartType] = useState<ChartType>('auto');
   const clock = new Date(now).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
 
   return (
@@ -253,10 +255,30 @@ export function Overview({
       {/* Trend + activity */}
       <section className="grid gap-4 lg:grid-cols-3">
         <div className="card flex flex-col p-6 sm:p-7 lg:col-span-2">
-          <p className="eyebrow">14 วันล่าสุด</p>
-          <h3 className="display mt-1 mb-5 text-[22px]">ผู้ป่วยในวอร์ด และรับใหม่</h3>
+          <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <p className="eyebrow">{chartType === 'pie' ? 'ขณะนี้' : '14 วันล่าสุด'}</p>
+              <h3 className="display mt-1 text-[22px]">
+                {chartType === 'pie' ? 'สัดส่วนเตียงและผู้ป่วย' : 'ผู้ป่วยในวอร์ด และรับใหม่'}
+              </h3>
+            </div>
+            <Segmented options={CHART_TYPES} value={chartType} onChange={setChartType} size="sm" label="รูปแบบกราฟ" />
+          </div>
+          {chartType === 'pie' ? (
+            <div className="grid gap-6 sm:grid-cols-2">
+              <div>
+                <p className="mb-3 text-[13px] font-medium text-ink-2">สถานะเตียง</p>
+                <DonutChart size={150} unit="เตียง" centerLabel="เตียง" slices={bedStatusSlices(beds)} />
+              </div>
+              <div>
+                <p className="mb-3 text-[13px] font-medium text-ink-2">ความรุนแรงของผู้ป่วย</p>
+                <DonutChart size={150} centerLabel="ผู้ป่วย" slices={bedAcuitySlices(beds)} />
+              </div>
+            </div>
+          ) : (
           <div className="mt-auto">
             <SeriesChart
+              mode={chartType}
               data={trend}
               xKey="date"
               series={[
@@ -269,6 +291,7 @@ export function Overview({
               yMax={Math.max(total, 1)}
             />
           </div>
+          )}
         </div>
 
         <div className="card p-6 sm:p-7">

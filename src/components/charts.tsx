@@ -4,7 +4,10 @@ import {
   Bar,
   CartesianGrid,
   ComposedChart,
+  Cell,
   Line,
+  Pie,
+  PieChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -31,6 +34,18 @@ export const useChartTheme = (forceLight = false) => {
     ? { series: SERIES_DARK, grid: '#2c2c2e', axis: '#8e8e93', surface: '#1c1c1e', ink: '#f5f5f7' }
     : { series: SERIES_LIGHT, grid: '#ececf0', axis: '#86868b', surface: '#ffffff', ink: '#1d1d1f' };
 };
+
+export type ChartMode = 'auto' | 'line' | 'bar' | 'area';
+export type ChartType = ChartMode | 'pie';
+
+/** ตัวเลือกรูปแบบกราฟ (ใช้กับ <Segmented>) */
+export const CHART_TYPES: { value: ChartType; label: string }[] = [
+  { value: 'auto', label: 'ผสม' },
+  { value: 'bar', label: 'แท่ง' },
+  { value: 'line', label: 'เส้น' },
+  { value: 'area', label: 'พื้นที่' },
+  { value: 'pie', label: 'วงกลม' },
+];
 
 export interface SeriesDef {
   key: string;
@@ -108,6 +123,7 @@ export function SeriesChart({
   yMax,
   showLegend = true,
   printWidth,
+  mode = 'auto',
 }: {
   data: object[];
   xKey: string;
@@ -120,8 +136,11 @@ export function SeriesChart({
   showLegend?: boolean;
   /** ความกว้างคงที่สำหรับหน้าพิมพ์ (ใช้สีโหมดสว่างเสมอ) */
   printWidth?: number;
+  /** บังคับรูปแบบกราฟทุกชุดข้อมูล (auto = ตามที่กำหนดในแต่ละชุด) */
+  mode?: ChartMode;
 }) {
   const theme = useChartTheme(!!printWidth);
+  series = mode === 'auto' ? series : series.map((s) => ({ ...s, kind: mode }));
   const colors = series.length === 1 ? [theme.series[0]] : theme.series;
   const bars = series.filter((s) => s.kind === 'bar').length;
   const barSize = Math.max(4, Math.min(14, Math.floor(380 / Math.max(1, data.length * Math.max(1, bars)))));
@@ -237,5 +256,114 @@ function Frame({ printWidth, children }: { printWidth?: number; height: number; 
     <ResponsiveContainer width="100%" height="100%">
       {children}
     </ResponsiveContainer>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Donut (แผนภูมิวงกลม) — สำหรับดูสัดส่วน ไม่เกินประมาณ 5 กลุ่ม          */
+/* ------------------------------------------------------------------ */
+
+export interface Slice {
+  key: string;
+  label: string;
+  value: number;
+  color?: string;
+}
+
+export function DonutChart({
+  slices,
+  size = 200,
+  unit = 'ราย',
+  centerLabel = 'รวม',
+  printWidth,
+  emptyText = 'ยังไม่มีข้อมูล',
+}: {
+  slices: Slice[];
+  size?: number;
+  unit?: string;
+  centerLabel?: string;
+  /** สำหรับหน้าพิมพ์ / PDF: ใช้สีโหมดสว่าง */
+  printWidth?: number;
+  emptyText?: string;
+}) {
+  const theme = useChartTheme(!!printWidth);
+  const total = slices.reduce((s, x) => s + x.value, 0);
+  const colored = slices.map((x, i) => ({ ...x, color: x.color ?? theme.series[i % theme.series.length] }));
+  const shown = colored.filter((x) => x.value > 0);
+  const pct = (v: number) => (total ? Math.round((v / total) * 100) : 0);
+
+  return (
+    <div className="flex flex-wrap items-center gap-x-6 gap-y-4">
+      <div className="relative shrink-0" style={{ width: size, height: size }}>
+        <PieChart width={size} height={size}>
+          {total === 0 ? (
+            <Pie data={[{ v: 1 }]} dataKey="v" innerRadius="64%" outerRadius="100%" fill={theme.grid} stroke="none" isAnimationActive={false} />
+          ) : (
+            <Pie
+              data={shown}
+              dataKey="value"
+              nameKey="label"
+              innerRadius="64%"
+              outerRadius="100%"
+              paddingAngle={shown.length > 1 ? 2 : 0}
+              cornerRadius={4}
+              stroke={theme.surface}
+              strokeWidth={2}
+              startAngle={90}
+              endAngle={-270}
+              isAnimationActive={false}
+            >
+              {shown.map((x) => (
+                <Cell key={x.key} fill={x.color} />
+              ))}
+            </Pie>
+          )}
+          {total > 0 && !printWidth && (
+            <Tooltip
+              content={({ active, payload }) => {
+                if (!active || !payload?.length) return null;
+                const x = payload[0].payload as Slice & { color: string };
+                return (
+                  <div className="glass glass-strong rounded-2xl px-3.5 py-2.5 text-[12px]">
+                    <p className="flex items-center gap-2 font-semibold text-ink">
+                      <span className="size-2 rounded-full" style={{ background: x.color }} />
+                      {x.label}
+                    </p>
+                    <p className="num mt-0.5 text-ink-2">
+                      {x.value} {unit} · {pct(x.value)}%
+                    </p>
+                  </div>
+                );
+              }}
+            />
+          )}
+        </PieChart>
+        <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center text-center">
+          <span
+            className="num leading-none font-semibold"
+            style={{ fontSize: Math.round(Math.max(15, Math.min(28, size * 0.15))), ...(printWidth ? { color: '#000' } : {}) }}
+          >
+            {total}
+          </span>
+          <span className={size < 120 ? 'mt-0.5 text-[9px] text-ink-3' : 'mt-1 text-[11px] text-ink-3'}>
+            {total ? centerLabel : emptyText}
+          </span>
+        </div>
+      </div>
+      <ul className="min-w-[150px] max-w-xs flex-1 space-y-2 text-[13px]">
+        {colored.map((x) => (
+          <li key={x.key} className="flex items-center justify-between gap-3">
+            <span className="flex min-w-0 items-center gap-2 text-ink-2">
+              <span className="size-2.5 shrink-0 rounded-[3px]" style={{ background: x.color }} />
+              <span className="truncate">{x.label}</span>
+            </span>
+            <span className="num shrink-0 font-semibold text-ink">
+              {x.value}
+              <span className="ml-1.5 font-normal text-ink-3">{pct(x.value)}%</span>
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
