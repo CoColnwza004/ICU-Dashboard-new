@@ -34,7 +34,7 @@ const write = (key: string, value: unknown) => {
 };
 
 const fingerprint = (s: Snapshot) => JSON.stringify([s.beds, s.daily, s.logs, s.stats, s.gids]);
-const teamPrint = (s: Snapshot) => (s.staff === undefined ? null : JSON.stringify([s.staff, s.roster]));
+const teamPrint = (s: Snapshot) => (s.staff === undefined ? null : JSON.stringify([s.staff, s.roster, s.docs]));
 /** บุคลากร/ตารางเวรเปลี่ยนไม่บ่อย: ดึงทุก ๆ 6 รอบ (ประมาณ 30 วินาที) */
 const TEAM_EVERY = 6;
 
@@ -93,6 +93,7 @@ export function useIcuStore() {
       if (snap.staff === undefined) {
         next.staff = dataRef.current.staff;
         next.roster = dataRef.current.roster;
+        next.docs = dataRef.current.docs;
       }
       dataRef.current = next;
       setData(next);

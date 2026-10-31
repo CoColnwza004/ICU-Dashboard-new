@@ -100,11 +100,43 @@ export interface RosterRow {
   row?: number;
 }
 
+export type DocCategory =
+  | 'ควบคุมการติดเชื้อ'
+  | 'การดูแลผู้ป่วยวิกฤต'
+  | 'ภาวะฉุกเฉิน'
+  | 'ยาและสารน้ำ'
+  | 'การรับ-ส่งต่อผู้ป่วย'
+  | 'อุปกรณ์การแพทย์'
+  | 'ระเบียบหน่วยงาน'
+  | 'อื่นๆ';
+export type DocType = 'SOP' | 'แนวปฏิบัติ (CPG)' | 'ระเบียบ / ข้อบังคับ' | 'คู่มือ' | 'แบบฟอร์ม';
+
+/** 1 เอกสาร = 1 แถวในแท็บ Docs */
+export interface Doc {
+  id: string;
+  title: string;
+  category: DocCategory;
+  type: DocType;
+  summary: string;
+  /** ขั้นตอนสั้น ๆ 1 บรรทัด = 1 ข้อ */
+  content: string;
+  link: string;
+  version: string;
+  effectiveDate: string; // yyyy-MM-dd
+  reviewDate: string; // yyyy-MM-dd
+  owner: string;
+  tags: string[];
+  pinned: boolean;
+  active: boolean;
+  updatedAt: string;
+  row?: number;
+}
+
 export interface SheetMeta {
   spreadsheetId: string;
   spreadsheetUrl: string;
   title: string;
-  gids: { beds: number; daily: number; log: number; stats?: number; staff?: number; roster?: number };
+  gids: { beds: number; daily: number; log: number; stats?: number; staff?: number; roster?: number; docs?: number };
 }
 
 export interface IcuData {
@@ -114,6 +146,7 @@ export interface IcuData {
   stats: StatsRecord[];
   staff: Staff[];
   roster: RosterRow[];
+  docs: Doc[];
 }
 
 export type SheetOp =
@@ -123,6 +156,8 @@ export type SheetOp =
   | { type: 'upsertStats'; record: Omit<StatsRecord, 'row'> }
   | { type: 'upsertStaff'; staff: Partial<Omit<Staff, 'row'>> & { id: string } }
   | { type: 'upsertRoster'; record: { month: string; staffId: string; name: string; days: Record<string, string> } }
-  | { type: 'uploadPhoto'; staffId: string; dataUrl: string };
+  | { type: 'uploadPhoto'; staffId: string; dataUrl: string }
+  | { type: 'upsertDoc'; doc: Partial<Omit<Doc, 'row' | 'active' | 'updatedAt'>> & { id: string; status?: 'ใช้งาน' | 'ยกเลิก' } }
+  | { type: 'uploadDoc'; docId: string; name: string; dataUrl: string };
 
 export type SyncState = 'local' | 'connecting' | 'live' | 'saving' | 'offline' | 'error';

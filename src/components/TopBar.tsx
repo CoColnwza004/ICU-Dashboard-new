@@ -1,4 +1,4 @@
-import { Activity, CalendarClock, CalendarDays, Gauge, LayoutGrid, Maximize, Settings2, Sheet as SheetIcon, Users } from 'lucide-react';
+import { Activity, BookOpen, CalendarClock, CalendarDays, Gauge, LayoutGrid, Maximize, Settings2, Sheet as SheetIcon, Users } from 'lucide-react';
 import { enterFullscreen } from './WallView';
 import { HOSPITAL } from '../lib/constants';
 import { relativeTime } from '../lib/date';
@@ -13,6 +13,7 @@ const SECTIONS: { value: Section; label: string; icon: typeof Activity; view: Vi
   { value: 'dashboard', label: 'แดชบอร์ด', icon: LayoutGrid, view: 'overview' },
   { value: 'roster', label: 'ตารางเวร', icon: CalendarClock, view: 'roster' },
   { value: 'staff', label: 'บุคลากร', icon: Users, view: 'staff' },
+  { value: 'docs', label: 'คู่มือ', icon: BookOpen, view: 'docs' },
 ];
 
 /** เมนูย่อยของแดชบอร์ด */
@@ -125,7 +126,7 @@ export function TopBar({ view, onView, onSettings }: { view: View; onView: (v: V
       {/* แถบแท็บลอยด้านล่างสำหรับมือถือ (แบบ iOS) */}
       <nav
         aria-label="เมนูหลัก"
-        className="glass glass-strong fixed inset-x-0 bottom-[max(12px,env(safe-area-inset-bottom))] z-40 mx-auto flex w-[min(360px,calc(100%-24px))] items-center justify-between rounded-full p-1.5 md:hidden"
+        className="glass glass-strong fixed inset-x-0 bottom-[max(12px,env(safe-area-inset-bottom))] z-40 mx-auto flex w-[min(420px,calc(100%-24px))] items-center justify-between rounded-full p-1.5 md:hidden"
       >
         {SECTIONS.map((t) => {
           const Icon = t.icon;

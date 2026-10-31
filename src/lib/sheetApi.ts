@@ -13,6 +13,7 @@ export interface Snapshot extends SheetMeta {
   /** ไม่มีเมื่อขอแบบ parts=core หรือสคริปต์เป็นเวอร์ชันเก่า */
   staff?: Record<string, unknown>[];
   roster?: Record<string, unknown>[];
+  docs?: Record<string, unknown>[];
 }
 
 const isAppsScriptUrl = (url: string) => /^https:\/\/script\.google(usercontent)?\.com\//.test(url.trim());

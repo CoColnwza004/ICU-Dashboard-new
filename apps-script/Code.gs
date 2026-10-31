@@ -12,6 +12,7 @@
  *   Stats — สถิติการใช้เตียงรายเดือน (ADC, ALOS, BOR, BTR, TOI คำนวณด้วยสูตรในชีต)
  *   Staff — รายชื่อบุคลากร (ชื่อ ตำแหน่ง รูป หัวหน้า) ใช้ทำผังองค์กร
  *   Roster — ตารางเวรรายเดือน (1 แถว = 1 คน ต่อ 1 เดือน, คอลัมน์ 1–31 = วันที่)
+ *   Docs   — คู่มือ / SOP / แนวปฏิบัติ / ระเบียบ (ไฟล์ PDF เก็บใน Google Drive)
  *
  * ครั้งแรกหลังวางโค้ดเวอร์ชันนี้: เลือกฟังก์ชัน authorize แล้วกด Run เพื่ออนุญาตให้บันทึกรูปลง Google Drive
  *
@@ -23,7 +24,7 @@
 // (ไม่บังคับ) ตั้งรหัสลับ แล้วใส่รหัสเดียวกันในหน้าเชื่อมต่อของเว็บ
 const API_TOKEN = '';
 
-const TAB = { beds: 'Beds', daily: 'Daily', log: 'Log', stats: 'Stats', staff: 'Staff', roster: 'Roster' };
+const TAB = { beds: 'Beds', daily: 'Daily', log: 'Log', stats: 'Stats', staff: 'Staff', roster: 'Roster', docs: 'Docs' };
 const DEFAULT_BED_COUNT = 8;
 
 const BED_COLS = [
@@ -86,6 +87,25 @@ const ROSTER_HEAD = (function () {
 })();
 
 const PHOTO_FOLDER = 'ICU Smart Center - รูปบุคลากร';
+const DOC_FOLDER = 'ICU Smart Center - คู่มือ SOP';
+
+const DOC_COLS = [
+  'id', 'title', 'category', 'type', 'summary', 'content', 'link', 'version',
+  'effectiveDate', 'reviewDate', 'owner', 'tags', 'pinned', 'status', 'updatedAt',
+];
+const DOC_HEAD = [
+  'รหัส', 'ชื่อเอกสาร', 'หมวด', 'ประเภท', 'สรุปสั้น ๆ', 'ขั้นตอน (1 บรรทัด = 1 ข้อ)', 'ลิงก์ไฟล์', 'ฉบับที่',
+  'วันที่ประกาศใช้', 'วันที่ต้องทบทวน', 'ผู้รับผิดชอบ', 'คำค้น', 'ปักหมุด', 'สถานะ', 'อัปเดตล่าสุด',
+];
+const DOC_CATEGORIES = [
+  'ควบคุมการติดเชื้อ', 'การดูแลผู้ป่วยวิกฤต', 'ภาวะฉุกเฉิน', 'ยาและสารน้ำ',
+  'การรับ-ส่งต่อผู้ป่วย', 'อุปกรณ์การแพทย์', 'ระเบียบหน่วยงาน', 'อื่นๆ',
+];
+const DOC_TYPES = ['SOP', 'แนวปฏิบัติ (CPG)', 'ระเบียบ / ข้อบังคับ', 'คู่มือ', 'แบบฟอร์ม'];
+const DOC_ACTIVE = 'ใช้งาน';
+const DOC_INACTIVE = 'ยกเลิก';
+/** ช่องที่เป็นวันที่อย่างเดียว (ไม่มีเวลา) */
+const DATE_ONLY = { date: true, effectiveDate: true, reviewDate: true };
 
 const STATUS_TH = { available: 'ว่าง', occupied: 'มีผู้ป่วย', cleaning: 'ทำความสะอาด' };
 const EVENT_TH = {
@@ -167,8 +187,9 @@ function ensureSetup_(force) {
     stats: !!ss.getSheetByName(TAB.stats),
     staff: !!ss.getSheetByName(TAB.staff),
     roster: !!ss.getSheetByName(TAB.roster),
+    docs: !!ss.getSheetByName(TAB.docs),
   };
-  if (!force && existed.beds && existed.daily && existed.log && existed.stats && existed.staff && existed.roster) return;
+  if (!force && existed.beds && existed.daily && existed.log && existed.stats && existed.staff && existed.roster && existed.docs) return;
 
   const beds = sheet_(TAB.beds, BED_HEAD);
   const daily = sheet_(TAB.daily, DAILY_HEAD);
@@ -176,6 +197,7 @@ function ensureSetup_(force) {
   const stats = sheet_(TAB.stats, STATS_HEAD);
   const staff = sheet_(TAB.staff, STAFF_HEAD);
   const roster = sheet_(TAB.roster, ROSTER_HEAD);
+  const docs = sheet_(TAB.docs, DOC_HEAD);
 
   if (beds.getLastRow() < 2) {
     const now = new Date();
@@ -240,8 +262,25 @@ function ensureSetup_(force) {
   roster.setColumnWidth(3, 180);
   for (let c = 4; c < 4 + ROSTER_DAYS; c++) roster.setColumnWidth(c, 44);
 
+  docs.getRange('A2:A').setNumberFormat('@');
+  docs.getRange('H2:H').setNumberFormat('@');
+  docs.getRange('I2:J').setNumberFormat('yyyy-mm-dd');
+  docs.getRange('O2:O').setNumberFormat('yyyy-mm-dd hh:mm');
+  docs.getRange('E2:F').setWrap(true);
+  const list = function (values) {
+    return SpreadsheetApp.newDataValidation().requireValueInList(values, true).setAllowInvalid(true).build();
+  };
+  docs.getRange('C2:C500').setDataValidation(list(DOC_CATEGORIES));
+  docs.getRange('D2:D500').setDataValidation(list(DOC_TYPES));
+  docs.getRange('M2:M500').setDataValidation(list(['ใช่']));
+  docs.getRange('N2:N500').setDataValidation(list([DOC_ACTIVE, DOC_INACTIVE]));
+  docs.setFrozenColumns(2);
+  docs.setColumnWidth(2, 260);
+  docs.setColumnWidth(5, 300);
+  docs.setColumnWidth(6, 300);
+
   const first = ss.getSheets()[0];
-  if (first && first.getName() !== TAB.beds && first.getLastRow() === 0 && ss.getSheets().length > 6) {
+  if (first && first.getName() !== TAB.beds && first.getLastRow() === 0 && ss.getSheets().length > 7) {
     ss.deleteSheet(first); // ลบ "Sheet1" ว่าง ๆ ที่ติดมากับไฟล์ใหม่
   }
 }
@@ -273,6 +312,7 @@ function snapshot_(parts) {
   const stats = ss.getSheetByName(TAB.stats);
   const staff = ss.getSheetByName(TAB.staff);
   const roster = ss.getSheetByName(TAB.roster);
+  const docs = ss.getSheetByName(TAB.docs);
   const out = {
     spreadsheetId: ss.getId(),
     spreadsheetUrl: ss.getUrl(),
@@ -280,7 +320,7 @@ function snapshot_(parts) {
     timeZone: tz,
     gids: {
       beds: beds.getSheetId(), daily: daily.getSheetId(), log: log.getSheetId(), stats: stats.getSheetId(),
-      staff: staff.getSheetId(), roster: roster.getSheetId(),
+      staff: staff.getSheetId(), roster: roster.getSheetId(), docs: docs.getSheetId(),
     },
     beds: readRows_(beds, BED_COLS, tz),
     daily: readRows_(daily, DAILY_COLS, tz),
@@ -294,6 +334,7 @@ function snapshot_(parts) {
       return r;
     });
     out.roster = readRoster_(roster, tz);
+    out.docs = readRows_(docs, DOC_COLS, tz);
   }
   return out;
 }
@@ -328,7 +369,7 @@ function readRows_(sh, cols, tz) {
     cols.forEach(function (c, j) {
       let v = r[j];
       if (v instanceof Date) {
-        v = c === 'date'
+        v = DATE_ONLY[c]
           ? Utilities.formatDate(v, tz, 'yyyy-MM-dd')
           : c === 'month'
             ? Utilities.formatDate(v, tz, 'yyyy-MM')
@@ -353,6 +394,8 @@ function applyOp_(op) {
   if (op.type === 'upsertStaff') return upsert_(TAB.staff, STAFF_COLS, 'id', toStaffRow_(op.staff));
   if (op.type === 'upsertRoster') return upsertRoster_(op.record);
   if (op.type === 'uploadPhoto') return uploadPhoto_(op.staffId, op.dataUrl);
+  if (op.type === 'upsertDoc') return upsert_(TAB.docs, DOC_COLS, 'id', toDocRow_(op.doc));
+  if (op.type === 'uploadDoc') return uploadDoc_(op.docId, op.name, op.dataUrl);
   throw new Error('unknown op: ' + op.type);
 }
 
@@ -428,8 +471,7 @@ function upsertRoster_(rec) {
 }
 
 function photoFolder_() {
-  const it = DriveApp.getFoldersByName(PHOTO_FOLDER);
-  return it.hasNext() ? it.next() : DriveApp.createFolder(PHOTO_FOLDER);
+  return folderByName_(PHOTO_FOLDER);
 }
 
 /** บันทึกรูปบุคลากร (data URL) ลง Google Drive แล้วใส่ลิงก์ในแท็บ Staff */
@@ -444,6 +486,37 @@ function uploadPhoto_(staffId, dataUrl) {
   const file = folder.createFile(Utilities.newBlob(Utilities.base64Decode(m[2]), m[1], name));
   file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
   upsert_(TAB.staff, STAFF_COLS, 'id', { id: id, photo: 'https://lh3.googleusercontent.com/d/' + file.getId() });
+}
+
+function toDocRow_(d) {
+  const o = {};
+  Object.keys(d).forEach(function (k) {
+    if (DOC_COLS.indexOf(k) < 0) return;
+    let v = d[k];
+    if (k === 'pinned') v = v ? 'ใช่' : '';
+    if (k === 'status') v = v === false || v === DOC_INACTIVE ? DOC_INACTIVE : DOC_ACTIVE;
+    if (k === 'tags' && Array.isArray(v)) v = v.join(', ');
+    o[k] = v;
+  });
+  o.updatedAt = nowStr_();
+  return o;
+}
+
+/** บันทึกไฟล์คู่มือ (data URL) ลงโฟลเดอร์ใน Google Drive แล้วใส่ลิงก์ในแท็บ Docs */
+function uploadDoc_(docId, name, dataUrl) {
+  const id = String(docId || '').trim();
+  const m = String(dataUrl || '').match(/^data:([\w.+-]+\/[\w.+-]+);base64,(.+)$/);
+  if (!id || !m) throw new Error('invalid file');
+  const folder = folderByName_(DOC_FOLDER);
+  const fileName = id + ' - ' + String(name || 'document').replace(/[\\/:*?"<>|]/g, ' ').slice(0, 120);
+  const file = folder.createFile(Utilities.newBlob(Utilities.base64Decode(m[2]), m[1], fileName));
+  file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+  upsert_(TAB.docs, DOC_COLS, 'id', { id: id, link: 'https://drive.google.com/file/d/' + file.getId() + '/view', updatedAt: nowStr_() });
+}
+
+function folderByName_(name) {
+  const it = DriveApp.getFoldersByName(name);
+  return it.hasNext() ? it.next() : DriveApp.createFolder(name);
 }
 
 /** Stats: เขียนเฉพาะช่องกรอก (A–E) และหมายเหตุ (K) — F–J เป็นสูตรของชีต */
@@ -532,7 +605,7 @@ function toCell_(field, v) {
   if (v === null || v === undefined) return '';
   if (typeof v !== 'string' || v === '') return v;
   const tz = SpreadsheetApp.getActive().getSpreadsheetTimeZone();
-  if (field === 'date' && /^\d{4}-\d{2}-\d{2}$/.test(v)) {
+  if (DATE_ONLY[field] && /^\d{4}-\d{2}-\d{2}$/.test(v)) {
     return Utilities.parseDate(v, tz, 'yyyy-MM-dd');
   }
   if (DATETIME_FIELDS[field] && /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}/.test(v)) {

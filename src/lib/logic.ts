@@ -16,6 +16,7 @@ import type {
   SheetOp,
 } from '../types';
 import { ACUITIES, DEFAULT_BEDS, DEVICES, EVENT_META, INDICATORS } from './constants';
+import { demoDocs, docOp, normalizeDoc, sortDocs } from './docs';
 import { normalizeDateKey, parseLocalDateTime, shiftDate, toLocalDateTime, todayKey } from './date';
 
 /* ------------------------------------------------------------------ */
@@ -59,6 +60,7 @@ export const initialData = (): IcuData => ({
   stats: [],
   staff: [],
   roster: [],
+  docs: [],
 });
 
 /** ข้อมูลเก่าในเบราว์เซอร์ (ก่อนมีแท็บ Stats / 8 เตียง) → รูปแบบปัจจุบัน */
@@ -68,7 +70,7 @@ export const upgradeLocalData = (d: Partial<IcuData>): IcuData => {
     if (!beds.some((b) => b.bedNumber === n)) beds.push(emptyBed(n));
   });
   beds.sort((a, b) => a.bedNumber.localeCompare(b.bedNumber));
-  return { beds, daily: d.daily ?? [], logs: d.logs ?? [], stats: d.stats ?? [], staff: d.staff ?? [], roster: d.roster ?? [] };
+  return { beds, daily: d.daily ?? [], logs: d.logs ?? [], stats: d.stats ?? [], staff: d.staff ?? [], roster: d.roster ?? [], docs: d.docs ?? [] };
 };
 
 /* ------------------------------------------------------------------ */
@@ -222,7 +224,9 @@ export const normalizeData = (raw: {
   stats?: Raw[];
   staff?: Raw[];
   roster?: Raw[];
+  docs?: Raw[];
 }): IcuData => ({
+  docs: (raw.docs ?? []).map(normalizeDoc).filter((d) => d.id && d.title).sort(sortDocs),
   staff: (raw.staff ?? []).map(normalizeStaff).filter((x) => x.id && x.name).sort(byOrder),
   roster: (raw.roster ?? []).map(normalizeRoster).filter((x) => /^\d{4}-\d{2}$/.test(x.month) && (x.staffId || x.name)),
   beds: (raw.beds ?? []).map(normalizeBed).filter((b) => b.bedNumber),
@@ -419,6 +423,7 @@ export const pushAllOps = (data: IcuData): SheetOp[] => [
       ...(local ? [{ type: 'uploadPhoto', staffId: x.id, dataUrl: photo } as SheetOp] : []),
     ];
   }),
+  ...(data.docs ?? []).map(docOp),
   ...(data.roster ?? []).map(
     (r) =>
       ({
@@ -629,7 +634,7 @@ export const demoData = (): IcuData => {
     { timestamp: ago(1.4), event: 'admit', bedNumber: 'ICU-02', caseCode: 'CASE-2414', acuity: 'High', admittedAt: ago(1.4), note: '' },
     { timestamp: ago(0.3), event: 'ward', bedNumber: 'ICU-03', caseCode: 'CASE-2408', acuity: 'Moderate', admittedAt: ago(4.5), note: 'ย้ายอายุรกรรมชาย' },
   ];
-  return { beds, daily, logs, stats: [], ...demoTeam() };
+  return { beds, daily, logs, stats: [], ...demoTeam(), docs: demoDocs() };
 };
 
 /** ทีมตัวอย่าง (ชื่อสมมติ ไม่มีรูป) + ตารางเวรเดือนนี้ — ใช้เฉพาะโหมดทดลองในเครื่อง */

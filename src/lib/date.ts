@@ -80,3 +80,7 @@ export const relativeTime = (d: Date | null, now: number) => {
   if (m < 60) return `${m} นาทีที่แล้ว`;
   return d.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
 };
+
+/** วันที่แบบมีปี เช่น 14 เม.ย. 2027 */
+export const fmtDateYear = (key: string) =>
+  parseDateKey(key).toLocaleDateString(TH, { day: 'numeric', month: 'short', year: 'numeric' });

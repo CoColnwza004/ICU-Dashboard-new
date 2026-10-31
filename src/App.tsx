@@ -8,6 +8,7 @@ import { Stats } from './components/Stats';
 import { isLandscape, pdfFilename, PrintReport, type PrintJob } from './components/PrintReport';
 import { RosterPage } from './components/RosterPage';
 import { StaffPage } from './components/StaffPage';
+import { DocsPage } from './components/DocsPage';
 import { exportPdf } from './lib/pdf';
 import { SettingsPanel } from './components/SettingsPanel';
 import { DashboardNav, TopBar } from './components/TopBar';
@@ -71,6 +72,7 @@ export default function App() {
             />
           )}
           {view === 'staff' && <StaffPage />}
+          {view === 'docs' && <DocsPage />}
           {view === 'overview' && (
             <Overview onOpenBed={setBed} onAdmit={openAdmit} onView={setView} onSettings={() => setSettings(true)} />
           )}
