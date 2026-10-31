@@ -34,6 +34,9 @@ const write = (key: string, value: unknown) => {
 };
 
 const fingerprint = (s: Snapshot) => JSON.stringify([s.beds, s.daily, s.logs, s.stats, s.gids]);
+const teamPrint = (s: Snapshot) => (s.staff === undefined ? null : JSON.stringify([s.staff, s.roster]));
+/** บุคลากร/ตารางเวรเปลี่ยนไม่บ่อย: ดึงทุก ๆ 6 รอบ (ประมาณ 30 วินาที) */
+const TEAM_EVERY = 6;
 
 export interface Toast {
   id: number;
@@ -62,6 +65,8 @@ export function useIcuStore() {
   const pending = useRef(0);
   const inFlight = useRef(false);
   const lastPrint = useRef('');
+  const lastTeam = useRef('');
+  const pollCount = useRef(0);
   const queue = useRef<Promise<void>>(Promise.resolve());
 
   dataRef.current = data;
@@ -78,9 +83,17 @@ export function useIcuStore() {
 
   const applySnapshot = useCallback((snap: Snapshot) => {
     const print = fingerprint(snap);
-    if (print !== lastPrint.current) {
+    const team = teamPrint(snap);
+    const teamChanged = team !== null && team !== lastTeam.current;
+    if (print !== lastPrint.current || teamChanged) {
       lastPrint.current = print;
+      if (team !== null) lastTeam.current = team;
       const next = normalizeData(snap);
+      // รอบที่ไม่ได้ขอข้อมูลบุคลากร (parts=core) ใช้ข้อมูลเดิมต่อ
+      if (snap.staff === undefined) {
+        next.staff = dataRef.current.staff;
+        next.roster = dataRef.current.roster;
+      }
       dataRef.current = next;
       setData(next);
       setMeta({ spreadsheetId: snap.spreadsheetId, spreadsheetUrl: snap.spreadsheetUrl, title: snap.title, gids: snap.gids });
@@ -96,7 +109,9 @@ export function useIcuStore() {
     if (!cfg.url || inFlight.current || pending.current > 0) return;
     inFlight.current = true;
     try {
-      const snap = await fetchSnapshot(cfg);
+      const full = pollCount.current % TEAM_EVERY === 0;
+      pollCount.current += 1;
+      const snap = await fetchSnapshot(cfg, full ? undefined : 'core');
       if (pending.current === 0 && configRef.current.url === cfg.url) applySnapshot(snap);
     } catch (e) {
       setState(navigator.onLine ? 'error' : 'offline');
@@ -114,11 +129,17 @@ export function useIcuStore() {
     }
     setState((s) => (s === 'local' ? 'connecting' : s));
     lastPrint.current = '';
+    lastTeam.current = '';
+    pollCount.current = 0;
     void pull();
     const tick = window.setInterval(() => {
       if (document.visibilityState === 'visible') void pull();
     }, POLL_MS);
-    const wake = () => document.visibilityState === 'visible' && void pull();
+    const wake = () => {
+      if (document.visibilityState !== 'visible') return;
+      pollCount.current = 0; // กลับมาที่แท็บ: ดึงข้อมูลทั้งหมด
+      void pull();
+    };
     document.addEventListener('visibilitychange', wake);
     window.addEventListener('focus', wake);
     window.addEventListener('online', wake);

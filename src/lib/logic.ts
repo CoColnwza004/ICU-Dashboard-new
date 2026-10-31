@@ -1,4 +1,7 @@
 import type {
+  RosterRow,
+  Staff,
+  StaffGroup,
   StatsRecord,
   Acuity,
   Bed,
@@ -54,6 +57,8 @@ export const initialData = (): IcuData => ({
   daily: [],
   logs: [],
   stats: [],
+  staff: [],
+  roster: [],
 });
 
 /** ข้อมูลเก่าในเบราว์เซอร์ (ก่อนมีแท็บ Stats / 8 เตียง) → รูปแบบปัจจุบัน */
@@ -63,7 +68,7 @@ export const upgradeLocalData = (d: Partial<IcuData>): IcuData => {
     if (!beds.some((b) => b.bedNumber === n)) beds.push(emptyBed(n));
   });
   beds.sort((a, b) => a.bedNumber.localeCompare(b.bedNumber));
-  return { beds, daily: d.daily ?? [], logs: d.logs ?? [], stats: d.stats ?? [] };
+  return { beds, daily: d.daily ?? [], logs: d.logs ?? [], stats: d.stats ?? [], staff: d.staff ?? [], roster: d.roster ?? [] };
 };
 
 /* ------------------------------------------------------------------ */
@@ -174,7 +179,52 @@ export const normalizeStats = (r: Raw): StatsRecord => ({
   row: typeof r.row === 'number' ? r.row : undefined,
 });
 
-export const normalizeData = (raw: { beds?: Raw[]; daily?: Raw[]; logs?: Raw[]; stats?: Raw[] }): IcuData => ({
+const STAFF_GROUPS: StaffGroup[] = ['แพทย์', 'พยาบาล', 'ผู้ช่วยพยาบาล', 'พนักงานช่วยเหลือคนไข้', 'อื่นๆ'];
+
+export const normalizeStaff = (r: Raw): Staff => {
+  const g = str(r.group);
+  return {
+    id: str(r.id),
+    name: str(r.name),
+    nickname: str(r.nickname),
+    position: str(r.position),
+    group: (STAFF_GROUPS.find((x) => x === g) ?? (g.includes('พยาบาล') && !g.includes('ผู้ช่วย') ? 'พยาบาล' : 'อื่นๆ')) as StaffGroup,
+    reportsTo: str(r.reportsTo),
+    photo: str(r.photo),
+    skills: str(r.skills)
+      .split(/[,،;]/)
+      .map((x) => x.trim())
+      .filter(Boolean),
+    order: Number(r.order) || 0,
+    active: r.active !== false && str(r.active) !== 'ไม่ใช้งาน',
+    row: typeof r.row === 'number' ? r.row : undefined,
+  };
+};
+
+export const normalizeRoster = (r: Raw): RosterRow => {
+  const days = Array.isArray(r.days) ? (r.days as unknown[]).map(str) : [];
+  while (days.length < 31) days.push('');
+  return {
+    month: normalizeDateKey(`${str(r.month)}-01`).slice(0, 7),
+    staffId: str(r.staffId),
+    name: str(r.name),
+    days: days.slice(0, 31),
+    row: typeof r.row === 'number' ? r.row : undefined,
+  };
+};
+
+const byOrder = (a: Staff, b: Staff) => a.order - b.order || a.id.localeCompare(b.id);
+
+export const normalizeData = (raw: {
+  beds?: Raw[];
+  daily?: Raw[];
+  logs?: Raw[];
+  stats?: Raw[];
+  staff?: Raw[];
+  roster?: Raw[];
+}): IcuData => ({
+  staff: (raw.staff ?? []).map(normalizeStaff).filter((x) => x.id && x.name).sort(byOrder),
+  roster: (raw.roster ?? []).map(normalizeRoster).filter((x) => /^\d{4}-\d{2}$/.test(x.month) && (x.staffId || x.name)),
   beds: (raw.beds ?? []).map(normalizeBed).filter((b) => b.bedNumber),
   daily: (raw.daily ?? [])
     .map(normalizeDaily)
@@ -361,7 +411,65 @@ export const pushAllOps = (data: IcuData): SheetOp[] => [
     const { row: _row, ...record } = x;
     return { type: 'upsertStats', record } as SheetOp;
   }),
+  ...(data.staff ?? []).flatMap((x) => {
+    const { row: _row, photo, ...staff } = x;
+    const local = photo.startsWith('data:');
+    return [
+      { type: 'upsertStaff', staff: local ? staff : { ...staff, photo } } as SheetOp,
+      ...(local ? [{ type: 'uploadPhoto', staffId: x.id, dataUrl: photo } as SheetOp] : []),
+    ];
+  }),
+  ...(data.roster ?? []).map(
+    (r) =>
+      ({
+        type: 'upsertRoster',
+        record: { month: r.month, staffId: r.staffId, name: r.name, days: Object.fromEntries(r.days.map((v, i) => [String(i + 1), v])) },
+      }) as SheetOp,
+  ),
 ];
+
+/* ------------------------------------------------------------------ */
+/* Staff & roster actions                                              */
+/* ------------------------------------------------------------------ */
+
+export const nextStaffId = (staff: Staff[]) => {
+  const n = staff.reduce((m, s) => Math.max(m, Number(s.id.replace(/\D/g, '')) || 0), 0) + 1;
+  return `S${String(n).padStart(2, '0')}`;
+};
+
+/** บันทึกบุคลากร · photoDataUrl = รูปใหม่ที่ผู้ใช้เลือก (ถ้ามี) จะถูกอัปโหลดขึ้น Google Drive */
+export const saveStaff = (data: IcuData, s: Staff, photoDataUrl?: string): ActionResult => {
+  const next: Staff = { ...s, photo: photoDataUrl ?? s.photo };
+  const exists = data.staff.some((x) => x.id === s.id);
+  const staff = (exists ? data.staff.map((x) => (x.id === s.id ? { ...next, row: x.row } : x)) : [...data.staff, next]).sort(byOrder);
+  const { row: _row, photo, ...rest } = next;
+  const ops: SheetOp[] = [{ type: 'upsertStaff', staff: photoDataUrl ? rest : { ...rest, photo } }];
+  if (photoDataUrl) ops.push({ type: 'uploadPhoto', staffId: s.id, dataUrl: photoDataUrl });
+  return { next: { ...data, staff }, ops };
+};
+
+/** แก้ตารางเวรหลายช่องพร้อมกัน: changes[staffId][day] = รหัสเวร */
+export const saveRoster = (data: IcuData, month: string, changes: Record<string, Record<number, string>>): ActionResult => {
+  let roster = [...data.roster];
+  const ops: SheetOp[] = [];
+  Object.entries(changes).forEach(([staffId, days]) => {
+    const person = data.staff.find((s) => s.id === staffId);
+    const name = person?.name ?? '';
+    const idx = roster.findIndex((r) => r.month === month && r.staffId === staffId);
+    const base: RosterRow = idx >= 0 ? roster[idx] : { month, staffId, name, days: Array(31).fill('') };
+    const nextDays = [...base.days];
+    Object.entries(days).forEach(([d, v]) => {
+      nextDays[Number(d) - 1] = v;
+    });
+    const row: RosterRow = { ...base, name: name || base.name, days: nextDays };
+    roster = idx >= 0 ? roster.map((r, i) => (i === idx ? row : r)) : [...roster, row];
+    ops.push({
+      type: 'upsertRoster',
+      record: { month, staffId, name: row.name, days: Object.fromEntries(Object.entries(days).map(([d, v]) => [String(d), v])) },
+    });
+  });
+  return { next: { ...data, roster }, ops };
+};
 
 /* ------------------------------------------------------------------ */
 /* Monthly report                                                      */
@@ -521,6 +629,51 @@ export const demoData = (): IcuData => {
     { timestamp: ago(1.4), event: 'admit', bedNumber: 'ICU-02', caseCode: 'CASE-2414', acuity: 'High', admittedAt: ago(1.4), note: '' },
     { timestamp: ago(0.3), event: 'ward', bedNumber: 'ICU-03', caseCode: 'CASE-2408', acuity: 'Moderate', admittedAt: ago(4.5), note: 'ย้ายอายุรกรรมชาย' },
   ];
-  return { beds, daily, logs, stats: [] };
+  return { beds, daily, logs, stats: [], ...demoTeam() };
+};
+
+/** ทีมตัวอย่าง (ชื่อสมมติ ไม่มีรูป) + ตารางเวรเดือนนี้ — ใช้เฉพาะโหมดทดลองในเครื่อง */
+const demoTeam = (): Pick<IcuData, 'staff' | 'roster'> => {
+  const p = (
+    id: string,
+    name: string,
+    nickname: string,
+    position: string,
+    group: StaffGroup,
+    reportsTo: string,
+    skills: string[] = [],
+  ): Staff => ({ id, name, nickname, position, group, reportsTo, photo: '', skills, order: Number(id.slice(1)), active: true });
+  const staff: Staff[] = [
+    p('S01', 'นางสาวกมลวรรณ ใจดี', 'แอน', 'หัวหน้าหอผู้ป่วย ICU', 'พยาบาล', '', ['ACLS', 'การบริหารการพยาบาล']),
+    p('S02', 'นางพรทิพย์ ศรีสุข', 'ทิพย์', 'พยาบาลวิชาชีพชำนาญการ', 'พยาบาล', 'S01', ['ACLS', 'Infection control']),
+    p('S03', 'นางสาวสุภาวดี มั่นคง', 'วดี', 'พยาบาลวิชาชีพชำนาญการ', 'พยาบาล', 'S01', ['ACLS', 'Ventilator care']),
+    p('S04', 'นางสาวปิยะนุช แสงทอง', 'ปิ่น', 'พยาบาลวิชาชีพ', 'พยาบาล', 'S02', ['BLS']),
+    p('S05', 'นางสาวชุติมา วงศ์ใหญ่', 'ชุ', 'พยาบาลวิชาชีพ', 'พยาบาล', 'S02', ['BLS', 'CRRT']),
+    p('S06', 'นายธนพล รักษ์ดี', 'ต้น', 'พยาบาลวิชาชีพ', 'พยาบาล', 'S02', ['BLS']),
+    p('S07', 'นางสาวอรอุมา ทองดี', 'อร', 'พยาบาลวิชาชีพ', 'พยาบาล', 'S03', ['BLS']),
+    p('S08', 'นางสาวณัฐธิดา บุญมา', 'ณัฐ', 'พยาบาลวิชาชีพ', 'พยาบาล', 'S03', ['BLS', 'Wound care']),
+    p('S09', 'นางสาวศิริพร คำแก้ว', 'ศิ', 'พยาบาลวิชาชีพ', 'พยาบาล', 'S03', ['BLS']),
+    p('S10', 'นางสาวมณีรัตน์ พูลผล', 'มณี', 'ผู้ช่วยพยาบาล', 'ผู้ช่วยพยาบาล', 'S01'),
+    p('S11', 'นายสมชาย ดีงาม', 'ชาย', 'พนักงานช่วยเหลือคนไข้', 'พนักงานช่วยเหลือคนไข้', 'S01'),
+  ];
+  const ym = todayKey().slice(0, 7);
+  const [y, m] = ym.split('-').map(Number);
+  const nDays = new Date(y, m, 0).getDate();
+  const cycle = ['ช', 'ช', 'บ', 'บ', 'ด', 'ด', 'OFF', 'OFF'];
+  const roster: RosterRow[] = staff.map((st, i) => {
+    const days = Array.from({ length: 31 }, (_, d) => {
+      if (d >= nDays) return '';
+      const dow = new Date(y, m - 1, d + 1).getDay();
+      if (st.id === 'S01') return dow === 0 || dow === 6 ? 'OFF' : 'ช*';
+      if (st.id === 'S11') return dow === 0 ? 'OFF' : 'ช';
+      let code = cycle[(d + i * 3) % cycle.length];
+      if (i === 5 && d === 9) code = 'ลา';
+      if (i === 7 && d === 14) code = 'อบรม';
+      if ((st.id === 'S02' || st.id === 'S03') && code !== 'OFF' && (st.id === 'S02') === (d % 2 === 0)) code += '*';
+      return code;
+    });
+    return { month: ym, staffId: st.id, name: st.name, days };
+  });
+  return { staff, roster };
 };
 

@@ -3,10 +3,19 @@ import { fmtDateLong, fmtDateShort, fmtDateTime, fmtDayMonth, fmtMonth, shiftDat
 import { countsFromBeds, emptyDaily, findDaily, monthlySummary } from '../lib/logic';
 import { computeStats, fmtStat, STAT_DEFS, statsFor } from '../lib/stats';
 import { useStore } from '../lib/store';
+import { daysInMonth, isWeekend, parseCode, rosterFor, SHIFTS, weekdayShort } from '../lib/roster';
+import { CodeChip } from './RosterPage';
 import { admitAcuitySlices, bedAcuitySlices, bedStatusSlices, dischargeSlices, sumSlices } from '../lib/breakdowns';
 import { DonutChart, SeriesChart, type Slice } from './charts';
 
-export type PrintJob = { kind: 'daily'; date: string } | { kind: 'monthly'; ym: string } | { kind: 'stats'; ym: string };
+export type PrintJob =
+  | { kind: 'daily'; date: string }
+  | { kind: 'monthly'; ym: string }
+  | { kind: 'stats'; ym: string }
+  | { kind: 'roster'; ym: string };
+
+/** ตารางเวรกว้าง (31 วัน) จึงใช้กระดาษแนวนอน */
+export const isLandscape = (job: PrintJob) => job.kind === 'roster';
 
 const th = 'border-b border-black/20 py-1.5 pr-2 text-left text-[10px] font-semibold text-black/60';
 const td = 'border-b border-black/10 py-1.5 pr-2 text-[11px]';
@@ -16,7 +25,9 @@ export const pdfFilename = (job: PrintJob) =>
     ? `ICU-daily-report-${job.date}.pdf`
     : job.kind === 'stats'
       ? `ICU-bed-stats-${job.ym}.pdf`
-      : `ICU-monthly-report-${job.ym}.pdf`;
+      : job.kind === 'roster'
+        ? `ICU-roster-${job.ym}.pdf`
+        : `ICU-monthly-report-${job.ym}.pdf`;
 // ชื่อไฟล์เป็นภาษาอังกฤษ: บางเบราว์เซอร์/มือถือไม่รับชื่อไฟล์ภาษาไทยและจะตั้งชื่อเป็น "download"
 
 /** สีตัวอักษรในรายงานเป็นโทนสว่างเสมอ (แม้เครื่องจะใช้โหมดมืด) */
@@ -65,13 +76,21 @@ export function PrintReport({ job, mode = 'print' }: { job: PrintJob; mode?: 'pr
               ? `รายงานตัวชี้วัดประจำวัน — ${fmtDateLong(job.date)}`
               : job.kind === 'stats'
                 ? `สถิติการใช้เตียง — ${fmtMonth(job.ym)}`
-                : `รายงานประจำเดือน — ${fmtMonth(job.ym)}`}
+                : job.kind === 'roster'
+                  ? `ตารางเวร — ${fmtMonth(job.ym)}`
+                  : `รายงานประจำเดือน — ${fmtMonth(job.ym)}`}
           </h1>
         </div>
         <p className="text-[10px] text-black/50">พิมพ์เมื่อ {printed}</p>
       </header>
       {job.kind === 'daily' && <Daily date={job.date} />}
       {job.kind === 'monthly' && <MonthlyBody ym={job.ym} />}
+      {job.kind === 'roster' && (
+        <>
+          {mode === 'print' && <style>{'@page { size: A4 landscape; margin: 10mm; }'}</style>}
+          <RosterPrint ym={job.ym} />
+        </>
+      )}
       {job.kind === 'stats' && (
         <>
           <StatsBlock ym={job.ym} />
@@ -259,6 +278,63 @@ export function PrintReport({ job, mode = 'print' }: { job: PrintJob; mode?: 'pr
             })}
           </tbody>
         </table>
+      </section>
+    );
+  }
+
+  function RosterPrint({ ym }: { ym: string }) {
+    const n = daysInMonth(ym);
+    const lines = rosterFor(data, ym);
+    const days = Array.from({ length: n }, (_, i) => i + 1);
+    const cell = 'border border-black/15 px-0 py-1 text-center';
+    return (
+      <section>
+        <table className="w-full table-fixed border-collapse text-[9px]">
+          <thead>
+            <tr>
+              <th className="w-[150px] border border-black/15 px-1.5 py-1 text-left text-[9px] font-semibold">ชื่อ</th>
+              {days.map((d) => (
+                <th key={d} className={`${cell} font-semibold ${isWeekend(ym, d) ? 'bg-black/5' : ''}`}>
+                  <span className="block text-[7px] font-normal text-black/50">{weekdayShort(ym, d)}</span>
+                  {d}
+                </th>
+              ))}
+              <th className="w-[34px] border border-black/15 text-[8px]">รวม</th>
+            </tr>
+          </thead>
+          <tbody>
+            {lines.map((l, i) => (
+              <tr key={i}>
+                <td className="truncate border border-black/15 px-1.5 py-1 text-[9px]">
+                  {l.staff?.nickname ? `${l.staff.nickname} · ` : ''}
+                  {l.name}
+                </td>
+                {days.map((d) => (
+                  <td key={d} className={`${cell} ${isWeekend(ym, d) ? 'bg-black/5' : ''}`}>
+                    <CodeChip code={l.days[d - 1]} small />
+                  </td>
+                ))}
+                <td className="border border-black/15 text-center font-semibold">
+                  {days.reduce((s, d) => s + parseCode(l.days[d - 1]).shifts.length, 0)}
+                </td>
+              </tr>
+            ))}
+            {SHIFTS.map((s) => (
+              <tr key={s.key}>
+                <td className="border border-black/15 px-1.5 py-0.5 text-[8px] text-black/60">จำนวน{s.label}</td>
+                {days.map((d) => (
+                  <td key={d} className={`${cell} text-[8px] text-black/70`}>
+                    {lines.filter((l) => parseCode(l.days[d - 1]).shifts.includes(s.key)).length}
+                  </td>
+                ))}
+                <td className="border border-black/15" />
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <p className="mt-2 text-[9px] text-black/60">
+          ช = เช้า 08:00–16:00 · บ = บ่าย 16:00–24:00 · ด = ดึก 00:00–08:00 · ★ = หัวหน้าเวร · หยุด / ลา / อบรม
+        </p>
       </section>
     );
   }

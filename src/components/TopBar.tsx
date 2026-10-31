@@ -1,18 +1,35 @@
-import { Activity, CalendarDays, Gauge, LayoutGrid, Maximize, Settings2, Sheet as SheetIcon } from 'lucide-react';
+import { Activity, CalendarClock, CalendarDays, Gauge, LayoutGrid, Maximize, Settings2, Sheet as SheetIcon, Users } from 'lucide-react';
 import { enterFullscreen } from './WallView';
 import { HOSPITAL } from '../lib/constants';
 import { relativeTime } from '../lib/date';
-import { useNow, type View } from '../lib/hooks';
+import { sectionOf, useNow, type Section, type View } from '../lib/hooks';
 import { sheetLink } from '../lib/sheetApi';
 import { useStore } from '../lib/store';
 import { cx, Dot, IconButton, Segmented } from './ui';
 
-const TABS: { value: Exclude<View, 'wall'>; label: string; icon: typeof Activity }[] = [
+export const APP_NAME = 'ICU Smart Center';
+
+const SECTIONS: { value: Section; label: string; icon: typeof Activity; view: View }[] = [
+  { value: 'dashboard', label: 'แดชบอร์ด', icon: LayoutGrid, view: 'overview' },
+  { value: 'roster', label: 'ตารางเวร', icon: CalendarClock, view: 'roster' },
+  { value: 'staff', label: 'บุคลากร', icon: Users, view: 'staff' },
+];
+
+/** เมนูย่อยของแดชบอร์ด */
+export const DASHBOARD_TABS: { value: View; label: string; icon: typeof Activity }[] = [
   { value: 'overview', label: 'ภาพรวม', icon: LayoutGrid },
   { value: 'indicators', label: '12 ตัวชี้วัด', icon: Activity },
   { value: 'stats', label: 'สถิติเตียง', icon: Gauge },
   { value: 'monthly', label: 'รายเดือน', icon: CalendarDays },
 ];
+
+export function DashboardNav({ view, onView }: { view: View; onView: (v: View) => void }) {
+  return (
+    <div className="flex justify-center pt-5 sm:justify-start">
+      <Segmented options={DASHBOARD_TABS} value={view} onChange={onView} label="เมนูแดชบอร์ด" stretch className="flex w-full sm:inline-flex sm:w-auto" />
+    </div>
+  );
+}
 
 export function SyncBadge({ onClick, compact }: { onClick: () => void; compact?: boolean }) {
   const { state, lastSync, error } = useStore();
@@ -55,13 +72,19 @@ export function TopBar({ view, onView, onSettings }: { view: View; onView: (v: V
                 <path d="M5 17h5l2.5-6 4 11 2.5-5H27" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
             </span>
-            <span className="truncate text-[15px] font-semibold tracking-tight">
-              ICU <span className="font-normal text-ink-2">· {HOSPITAL}</span>
+            <span className="min-w-0 leading-tight">
+              <span className="block truncate text-[15px] font-semibold tracking-tight">{APP_NAME}</span>
+              <span className="block truncate text-[11px] text-ink-3">{HOSPITAL}</span>
             </span>
           </button>
 
           <div className="hidden md:block">
-            <Segmented options={TABS} value={view} onChange={onView} label="เมนูหลัก" />
+            <Segmented
+              options={SECTIONS}
+              value={sectionOf(view)}
+              onChange={(s) => onView(SECTIONS.find((x) => x.value === s)!.view)}
+              label="เมนูหลัก"
+            />
           </div>
 
           <div className="flex items-center gap-0.5">
@@ -102,19 +125,19 @@ export function TopBar({ view, onView, onSettings }: { view: View; onView: (v: V
       {/* แถบแท็บลอยด้านล่างสำหรับมือถือ (แบบ iOS) */}
       <nav
         aria-label="เมนูหลัก"
-        className="glass glass-strong fixed inset-x-0 bottom-[max(12px,env(safe-area-inset-bottom))] z-40 mx-auto flex w-[min(420px,calc(100%-24px))] items-center justify-between rounded-full p-1.5 md:hidden"
+        className="glass glass-strong fixed inset-x-0 bottom-[max(12px,env(safe-area-inset-bottom))] z-40 mx-auto flex w-[min(360px,calc(100%-24px))] items-center justify-between rounded-full p-1.5 md:hidden"
       >
-        {TABS.map((t) => {
+        {SECTIONS.map((t) => {
           const Icon = t.icon;
-          const active = t.value === view;
+          const active = t.value === sectionOf(view);
           return (
             <button
               key={t.value}
               type="button"
               aria-current={active ? 'page' : undefined}
-              onClick={() => onView(t.value)}
+              onClick={() => onView(t.view)}
               className={cx(
-                'flex h-[52px] min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-full text-[10.5px] font-medium whitespace-nowrap transition-all duration-300 ease-[var(--ease-liquid)]',
+                'flex h-[52px] min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-full text-[11px] font-medium whitespace-nowrap transition-all duration-300 ease-[var(--ease-liquid)]',
                 active ? 'seg-thumb text-accent' : 'text-ink-2 active:scale-95',
               )}
             >

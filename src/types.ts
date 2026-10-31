@@ -74,11 +74,37 @@ export interface StatsRecord {
   row?: number;
 }
 
+export type StaffGroup = 'แพทย์' | 'พยาบาล' | 'ผู้ช่วยพยาบาล' | 'พนักงานช่วยเหลือคนไข้' | 'อื่นๆ';
+
+/** 1 คน = 1 แถวในแท็บ Staff (มีแค่ชื่อและรูป ไม่มีเบอร์โทร) */
+export interface Staff {
+  id: string;
+  name: string;
+  nickname: string;
+  position: string;
+  group: StaffGroup;
+  reportsTo: string;
+  photo: string;
+  skills: string[];
+  order: number;
+  active: boolean;
+  row?: number;
+}
+
+/** 1 คน ต่อ 1 เดือน = 1 แถวในแท็บ Roster · days[0] = วันที่ 1 */
+export interface RosterRow {
+  month: string; // yyyy-MM
+  staffId: string;
+  name: string;
+  days: string[];
+  row?: number;
+}
+
 export interface SheetMeta {
   spreadsheetId: string;
   spreadsheetUrl: string;
   title: string;
-  gids: { beds: number; daily: number; log: number; stats?: number };
+  gids: { beds: number; daily: number; log: number; stats?: number; staff?: number; roster?: number };
 }
 
 export interface IcuData {
@@ -86,12 +112,17 @@ export interface IcuData {
   daily: DailyRecord[];
   logs: LogEntry[];
   stats: StatsRecord[];
+  staff: Staff[];
+  roster: RosterRow[];
 }
 
 export type SheetOp =
   | { type: 'upsertBed'; bed: Partial<Bed> & { bedNumber: string } }
   | { type: 'upsertDaily'; record: Partial<DailyRecord> & { date: string } }
   | { type: 'appendLog'; entry: LogEntry }
-  | { type: 'upsertStats'; record: Omit<StatsRecord, 'row'> };
+  | { type: 'upsertStats'; record: Omit<StatsRecord, 'row'> }
+  | { type: 'upsertStaff'; staff: Partial<Omit<Staff, 'row'>> & { id: string } }
+  | { type: 'upsertRoster'; record: { month: string; staffId: string; name: string; days: Record<string, string> } }
+  | { type: 'uploadPhoto'; staffId: string; dataUrl: string };
 
 export type SyncState = 'local' | 'connecting' | 'live' | 'saving' | 'offline' | 'error';

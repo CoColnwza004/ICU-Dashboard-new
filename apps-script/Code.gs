@@ -10,6 +10,10 @@
  *   Daily — 12 ตัวชี้วัดรายวัน (1 แถว = 1 วัน)
  *   Log   — ทะเบียนรับเข้า / จำหน่าย
  *   Stats — สถิติการใช้เตียงรายเดือน (ADC, ALOS, BOR, BTR, TOI คำนวณด้วยสูตรในชีต)
+ *   Staff — รายชื่อบุคลากร (ชื่อ ตำแหน่ง รูป หัวหน้า) ใช้ทำผังองค์กร
+ *   Roster — ตารางเวรรายเดือน (1 แถว = 1 คน ต่อ 1 เดือน, คอลัมน์ 1–31 = วันที่)
+ *
+ * ครั้งแรกหลังวางโค้ดเวอร์ชันนี้: เลือกฟังก์ชัน authorize แล้วกด Run เพื่ออนุญาตให้บันทึกรูปลง Google Drive
  *
  * แก้ไขข้อมูลในชีตได้ตามปกติ เว็บจะดึงข้อมูลใหม่ภายในไม่กี่วินาที
  * และเมื่อแก้ไขบนเว็บ ข้อมูลจะถูกเขียนกลับมาที่ชีตนี้ทันที
@@ -19,7 +23,7 @@
 // (ไม่บังคับ) ตั้งรหัสลับ แล้วใส่รหัสเดียวกันในหน้าเชื่อมต่อของเว็บ
 const API_TOKEN = '';
 
-const TAB = { beds: 'Beds', daily: 'Daily', log: 'Log', stats: 'Stats' };
+const TAB = { beds: 'Beds', daily: 'Daily', log: 'Log', stats: 'Stats', staff: 'Staff', roster: 'Roster' };
 const DEFAULT_BED_COUNT = 8;
 
 const BED_COLS = [
@@ -66,6 +70,23 @@ const AGE_GROUPS = [
   '< 1 ปี (ทารก)', '1–5 ปี', '6–12 ปี', '13–17 ปี', '18–39 ปี', '40–59 ปี', '60–69 ปี', '70–79 ปี', '≥ 80 ปี',
 ];
 
+const STAFF_COLS = ['id', 'name', 'nickname', 'position', 'group', 'reportsTo', 'photo', 'skills', 'order', 'active'];
+const STAFF_HEAD = [
+  'รหัส', 'ชื่อ-สกุล', 'ชื่อเล่น', 'ตำแหน่ง', 'กลุ่มงาน', 'หัวหน้า (รหัส)', 'รูป (ลิงก์)', 'ความเชี่ยวชาญ', 'ลำดับ', 'สถานะ',
+];
+const STAFF_GROUPS = ['แพทย์', 'พยาบาล', 'ผู้ช่วยพยาบาล', 'พนักงานช่วยเหลือคนไข้', 'อื่นๆ'];
+const STAFF_ACTIVE = 'ปฏิบัติงาน';
+const STAFF_INACTIVE = 'ไม่ใช้งาน';
+
+const ROSTER_DAYS = 31;
+const ROSTER_HEAD = (function () {
+  const h = ['เดือน', 'รหัส', 'ชื่อ'];
+  for (let d = 1; d <= ROSTER_DAYS; d++) h.push(String(d));
+  return h;
+})();
+
+const PHOTO_FOLDER = 'ICU Smart Center - รูปบุคลากร';
+
 const STATUS_TH = { available: 'ว่าง', occupied: 'มีผู้ป่วย', cleaning: 'ทำความสะอาด' };
 const EVENT_TH = {
   admit: 'รับเข้า', home: 'จำหน่ายกลับบ้าน', ward: 'ย้ายวอร์ด', refer: 'ส่งต่อ (Refer)', expired: 'เสียชีวิต', move: 'ย้ายเตียง',
@@ -80,7 +101,7 @@ function doGet(e) {
   return respond_(function () {
     checkToken_(e && e.parameter && e.parameter.token);
     ensureSetup_();
-    return snapshot_();
+    return snapshot_(e && e.parameter && e.parameter.parts);
   });
 }
 
@@ -131,6 +152,12 @@ function setup() {
   ensureSetup_(true);
 }
 
+/** กด Run ฟังก์ชันนี้ 1 ครั้งในหน้า Apps Script เพื่ออนุญาตให้สคริปต์บันทึกรูปบุคลากรลง Google Drive */
+function authorize() {
+  SpreadsheetApp.getActive().getName();
+  photoFolder_();
+}
+
 function ensureSetup_(force) {
   const ss = SpreadsheetApp.getActive();
   const existed = {
@@ -138,13 +165,17 @@ function ensureSetup_(force) {
     daily: !!ss.getSheetByName(TAB.daily),
     log: !!ss.getSheetByName(TAB.log),
     stats: !!ss.getSheetByName(TAB.stats),
+    staff: !!ss.getSheetByName(TAB.staff),
+    roster: !!ss.getSheetByName(TAB.roster),
   };
-  if (!force && existed.beds && existed.daily && existed.log && existed.stats) return;
+  if (!force && existed.beds && existed.daily && existed.log && existed.stats && existed.staff && existed.roster) return;
 
   const beds = sheet_(TAB.beds, BED_HEAD);
   const daily = sheet_(TAB.daily, DAILY_HEAD);
   const log = sheet_(TAB.log, LOG_HEAD);
   const stats = sheet_(TAB.stats, STATS_HEAD);
+  const staff = sheet_(TAB.staff, STAFF_HEAD);
+  const roster = sheet_(TAB.roster, ROSTER_HEAD);
 
   if (beds.getLastRow() < 2) {
     const now = new Date();
@@ -194,8 +225,23 @@ function ensureSetup_(force) {
   stats.getRange('I2:J').setNumberFormat('0.00');
   stats.setColumnWidth(11, 240);
 
+  staff.getRange('A2:A').setNumberFormat('@');
+  staff.getRange('F2:F').setNumberFormat('@');
+  staff.getRange('E2:E300').setDataValidation(
+    SpreadsheetApp.newDataValidation().requireValueInList(STAFF_GROUPS, true).setAllowInvalid(true).build());
+  staff.getRange('J2:J300').setDataValidation(
+    SpreadsheetApp.newDataValidation().requireValueInList([STAFF_ACTIVE, STAFF_INACTIVE], true).setAllowInvalid(true).build());
+  staff.setColumnWidth(2, 200);
+  staff.setColumnWidth(7, 240);
+
+  roster.getRange('A2:B').setNumberFormat('@');
+  roster.getRange(2, 4, roster.getMaxRows() - 1, ROSTER_DAYS).setNumberFormat('@').setHorizontalAlignment('center');
+  roster.setFrozenColumns(3);
+  roster.setColumnWidth(3, 180);
+  for (let c = 4; c < 4 + ROSTER_DAYS; c++) roster.setColumnWidth(c, 44);
+
   const first = ss.getSheets()[0];
-  if (first && first.getName() !== TAB.beds && first.getLastRow() === 0 && ss.getSheets().length > 4) {
+  if (first && first.getName() !== TAB.beds && first.getLastRow() === 0 && ss.getSheets().length > 6) {
     ss.deleteSheet(first); // ลบ "Sheet1" ว่าง ๆ ที่ติดมากับไฟล์ใหม่
   }
 }
@@ -217,25 +263,58 @@ function sheet_(name, header) {
 /* Read                                                                */
 /* ------------------------------------------------------------------ */
 
-function snapshot_() {
+/** parts = 'core' → เฉพาะข้อมูลที่เปลี่ยนบ่อย (เตียง/รายวัน/Log/Stats) · อื่น ๆ → รวมบุคลากรและตารางเวร */
+function snapshot_(parts) {
   const ss = SpreadsheetApp.getActive();
   const tz = ss.getSpreadsheetTimeZone();
   const beds = ss.getSheetByName(TAB.beds);
   const daily = ss.getSheetByName(TAB.daily);
   const log = ss.getSheetByName(TAB.log);
   const stats = ss.getSheetByName(TAB.stats);
-  return {
+  const staff = ss.getSheetByName(TAB.staff);
+  const roster = ss.getSheetByName(TAB.roster);
+  const out = {
     spreadsheetId: ss.getId(),
     spreadsheetUrl: ss.getUrl(),
     title: ss.getName(),
     timeZone: tz,
-    gids: { beds: beds.getSheetId(), daily: daily.getSheetId(), log: log.getSheetId(), stats: stats.getSheetId() },
+    gids: {
+      beds: beds.getSheetId(), daily: daily.getSheetId(), log: log.getSheetId(), stats: stats.getSheetId(),
+      staff: staff.getSheetId(), roster: roster.getSheetId(),
+    },
     beds: readRows_(beds, BED_COLS, tz),
     daily: readRows_(daily, DAILY_COLS, tz),
     logs: readRows_(log, LOG_COLS, tz),
     stats: readRows_(stats, STATS_COLS, tz),
     serverTime: Utilities.formatDate(new Date(), tz, "yyyy-MM-dd'T'HH:mm:ss"),
   };
+  if (parts !== 'core') {
+    out.staff = readRows_(staff, STAFF_COLS, tz).map(function (r) {
+      r.active = String(r.active).trim() !== STAFF_INACTIVE;
+      return r;
+    });
+    out.roster = readRoster_(roster, tz);
+  }
+  return out;
+}
+
+function readRoster_(sh, tz) {
+  const last = sh.getLastRow();
+  if (last < 2) return [];
+  const values = sh.getRange(2, 1, last - 1, 3 + ROSTER_DAYS).getDisplayValues();
+  const out = [];
+  values.forEach(function (r, i) {
+    if (!r[0] || !(r[1] || r[2])) return;
+    out.push({ row: i + 2, month: monthKey_(r[0], tz), staffId: r[1], name: r[2], days: r.slice(3) });
+  });
+  return out;
+}
+
+function monthKey_(v, tz) {
+  if (v instanceof Date) return Utilities.formatDate(v, tz, 'yyyy-MM');
+  const s = String(v).trim();
+  const m = s.match(/^(\d{4})-(\d{1,2})/);
+  return m ? m[1] + '-' + ('0' + m[2]).slice(-2) : s;
 }
 
 function readRows_(sh, cols, tz) {
@@ -271,6 +350,9 @@ function applyOp_(op) {
   if (op.type === 'upsertDaily') return upsertDaily_(op.record);
   if (op.type === 'appendLog') return appendLog_(op.entry);
   if (op.type === 'upsertStats') return upsertStats_(op.record);
+  if (op.type === 'upsertStaff') return upsert_(TAB.staff, STAFF_COLS, 'id', toStaffRow_(op.staff));
+  if (op.type === 'upsertRoster') return upsertRoster_(op.record);
+  if (op.type === 'uploadPhoto') return uploadPhoto_(op.staffId, op.dataUrl);
   throw new Error('unknown op: ' + op.type);
 }
 
@@ -298,6 +380,70 @@ function appendLog_(entry) {
   if (!o.timestamp) o.timestamp = nowStr_();
   const sh = SpreadsheetApp.getActive().getSheetByName(TAB.log);
   sh.appendRow(LOG_COLS.map(function (c) { return toCell_(c, o[c]); }));
+}
+
+function toStaffRow_(st) {
+  const o = {};
+  Object.keys(st).forEach(function (k) {
+    if (STAFF_COLS.indexOf(k) < 0) return;
+    let v = st[k];
+    if (k === 'active') v = v === false ? STAFF_INACTIVE : STAFF_ACTIVE;
+    if (k === 'skills' && Array.isArray(v)) v = v.join(', ');
+    o[k] = v;
+  });
+  return o;
+}
+
+/** ตารางเวร: เขียนเฉพาะวันที่ส่งมา (คนอื่นแก้วันอื่นพร้อมกันได้ไม่ทับกัน) */
+function upsertRoster_(rec) {
+  const ss = SpreadsheetApp.getActive();
+  const tz = ss.getSpreadsheetTimeZone();
+  const sh = ss.getSheetByName(TAB.roster);
+  const month = monthKey_(rec.month, tz);
+  const staffId = String(rec.staffId || '').trim();
+  if (!/^\d{4}-\d{2}$/.test(month) || !staffId) throw new Error('missing month/staffId');
+
+  const last = sh.getLastRow();
+  let rowNum = -1;
+  if (last >= 2) {
+    const keys = sh.getRange(2, 1, last - 1, 2).getDisplayValues();
+    for (let i = 0; i < keys.length; i++) {
+      if (monthKey_(keys[i][0], tz) === month && String(keys[i][1]).trim() === staffId) {
+        rowNum = i + 2;
+        break;
+      }
+    }
+  }
+  if (rowNum < 0) {
+    rowNum = Math.max(last, 1) + 1;
+    sh.getRange(rowNum, 1, 1, 2).setNumberFormat('@').setValues([[month, staffId]]);
+    sh.getRange(rowNum, 4, 1, ROSTER_DAYS).setNumberFormat('@').setHorizontalAlignment('center');
+  }
+  if (rec.name) sh.getRange(rowNum, 3).setValue(rec.name);
+  const days = rec.days || {};
+  Object.keys(days).forEach(function (d) {
+    const n = Number(d);
+    if (n >= 1 && n <= ROSTER_DAYS) sh.getRange(rowNum, 3 + n).setValue(String(days[d] || ''));
+  });
+}
+
+function photoFolder_() {
+  const it = DriveApp.getFoldersByName(PHOTO_FOLDER);
+  return it.hasNext() ? it.next() : DriveApp.createFolder(PHOTO_FOLDER);
+}
+
+/** บันทึกรูปบุคลากร (data URL) ลง Google Drive แล้วใส่ลิงก์ในแท็บ Staff */
+function uploadPhoto_(staffId, dataUrl) {
+  const id = String(staffId || '').trim();
+  const m = String(dataUrl || '').match(/^data:(image\/[a-z+]+);base64,(.+)$/);
+  if (!id || !m) throw new Error('invalid photo');
+  const folder = photoFolder_();
+  const name = id + '.jpg';
+  const old = folder.getFilesByName(name);
+  while (old.hasNext()) old.next().setTrashed(true);
+  const file = folder.createFile(Utilities.newBlob(Utilities.base64Decode(m[2]), m[1], name));
+  file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+  upsert_(TAB.staff, STAFF_COLS, 'id', { id: id, photo: 'https://lh3.googleusercontent.com/d/' + file.getId() });
 }
 
 /** Stats: เขียนเฉพาะช่องกรอก (A–E) และหมายเหตุ (K) — F–J เป็นสูตรของชีต */

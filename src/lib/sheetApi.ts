@@ -10,6 +10,9 @@ export interface Snapshot extends SheetMeta {
   daily: Record<string, unknown>[];
   logs: Record<string, unknown>[];
   stats?: Record<string, unknown>[];
+  /** ไม่มีเมื่อขอแบบ parts=core หรือสคริปต์เป็นเวอร์ชันเก่า */
+  staff?: Record<string, unknown>[];
+  roster?: Record<string, unknown>[];
 }
 
 const isAppsScriptUrl = (url: string) => /^https:\/\/script\.google(usercontent)?\.com\//.test(url.trim());
@@ -38,9 +41,11 @@ async function readJson(res: Response): Promise<Snapshot> {
   return body;
 }
 
-export async function fetchSnapshot(cfg: SheetConfig, signal?: AbortSignal): Promise<Snapshot> {
+/** parts='core' = เฉพาะเตียง/รายวัน/Log/Stats (ดึงบ่อย) · ไม่ระบุ = รวมบุคลากรและตารางเวร */
+export async function fetchSnapshot(cfg: SheetConfig, parts?: 'core', signal?: AbortSignal): Promise<Snapshot> {
   const u = new URL(cfg.url.trim());
   if (cfg.token) u.searchParams.set('token', cfg.token);
+  if (parts) u.searchParams.set('parts', parts);
   u.searchParams.set('_', String(Date.now()));
   return readJson(await fetch(u, { signal, cache: 'no-store', redirect: 'follow' }));
 }

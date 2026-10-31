@@ -3,7 +3,7 @@
  * แปลงหน้ารายงานเป็นภาพความละเอียดสูง แล้วแบ่งหน้า A4 ตรงรอยต่อของแถว/หัวข้อ ไม่ให้ตัดกลางบรรทัด
  * โหลดไลบรารีเฉพาะตอนกดปุ่ม เพื่อไม่ให้หน้าเว็บช้าลง
  */
-export async function exportPdf(node: HTMLElement, filename: string) {
+export async function exportPdf(node: HTMLElement, filename: string, landscape = false) {
   const [{ toCanvas }, { jsPDF }] = await Promise.all([import('html-to-image'), import('jspdf')]);
   await document.fonts.ready;
 
@@ -20,11 +20,13 @@ export async function exportPdf(node: HTMLElement, filename: string) {
   });
   const breaks = [...safe].sort((a, b) => a - b);
 
-  const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait', compress: true });
-  const margin = 12;
+  const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: landscape ? 'landscape' : 'portrait', compress: true });
+  const pageW = landscape ? 297 : 210;
+  const pageH = landscape ? 210 : 297;
+  const margin = landscape ? 8 : 12;
   const footer = 6;
-  const contentW = 210 - margin * 2;
-  const contentH = 297 - margin * 2 - footer;
+  const contentW = pageW - margin * 2;
+  const contentH = pageH - margin * 2 - footer;
   const pxPerMm = node.offsetWidth / contentW;
   const pagePx = Math.floor(contentH * pxPerMm);
   const total = node.scrollHeight;
@@ -55,7 +57,7 @@ export async function exportPdf(node: HTMLElement, filename: string) {
   pdf.setTextColor(120);
   for (let i = 1; i <= pages; i++) {
     pdf.setPage(i);
-    pdf.text(`${i} / ${pages}`, 210 - margin, 297 - margin + 2, { align: 'right' });
+    pdf.text(`${i} / ${pages}`, pageW - margin, pageH - margin + 2, { align: 'right' });
   }
   const url = URL.createObjectURL(pdf.output('blob'));
   const link = document.createElement('a');

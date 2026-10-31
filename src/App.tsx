@@ -5,14 +5,16 @@ import { Indicators } from './components/Indicators';
 import { Monthly } from './components/Monthly';
 import { Overview } from './components/Overview';
 import { Stats } from './components/Stats';
-import { pdfFilename, PrintReport, type PrintJob } from './components/PrintReport';
+import { isLandscape, pdfFilename, PrintReport, type PrintJob } from './components/PrintReport';
+import { RosterPage } from './components/RosterPage';
+import { StaffPage } from './components/StaffPage';
 import { exportPdf } from './lib/pdf';
 import { SettingsPanel } from './components/SettingsPanel';
-import { TopBar } from './components/TopBar';
+import { DashboardNav, TopBar } from './components/TopBar';
 import { WallView } from './components/WallView';
 import { Toasts } from './components/ui';
 import { HOSPITAL } from './lib/constants';
-import { useHashView } from './lib/hooks';
+import { sectionOf, useHashView } from './lib/hooks';
 import { StoreContext, useIcuStore } from './lib/store';
 
 export default function App() {
@@ -60,6 +62,15 @@ export default function App() {
         <div className="ambient" aria-hidden />
         <TopBar view={view} onView={setView} onSettings={() => setSettings(true)} />
         <main className="mx-auto max-w-[1120px] px-4 pb-32 sm:px-6 md:pb-24">
+          {sectionOf(view) === 'dashboard' && <DashboardNav view={view} onView={setView} />}
+          {view === 'roster' && (
+            <RosterPage
+              onPrint={(ym) => setPrintJob({ kind: 'roster', ym })}
+              onPdf={(ym) => setPdfJob({ kind: 'roster', ym })}
+              pdfBusy={!!pdfJob}
+            />
+          )}
+          {view === 'staff' && <StaffPage />}
           {view === 'overview' && (
             <Overview onOpenBed={setBed} onAdmit={openAdmit} onView={setView} onSettings={() => setSettings(true)} />
           )}
@@ -115,13 +126,14 @@ function PdfExporter({
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const started = useRef(false);
+  const W = isLandscape(job) ? 1100 : 760;
   useEffect(() => {
     if (started.current) return;
     started.current = true;
     const run = async () => {
       await new Promise((r) => window.setTimeout(r, 250)); // รอให้กราฟวาดเสร็จ
       try {
-        await exportPdf(ref.current!, pdfFilename(job));
+        await exportPdf(ref.current!, pdfFilename(job), isLandscape(job));
         toast('บันทึกไฟล์ PDF แล้ว');
       } catch (e) {
         console.error(e);
@@ -133,8 +145,8 @@ function PdfExporter({
     void run();
   }, [job, onDone, toast]);
   return createPortal(
-    <div aria-hidden style={{ position: 'fixed', left: -10000, top: 0, width: 760, background: '#fff', pointerEvents: 'none' }}>
-      <div ref={ref} style={{ width: 760, background: '#fff' }}>
+    <div aria-hidden style={{ position: 'fixed', left: -10000, top: 0, width: W, background: '#fff', pointerEvents: 'none' }}>
+      <div ref={ref} style={{ width: W, background: '#fff' }}>
         <PrintReport job={job} mode="pdf" />
       </div>
     </div>,

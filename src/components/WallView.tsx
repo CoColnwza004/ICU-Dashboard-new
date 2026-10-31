@@ -8,7 +8,9 @@ import { countsFromBeds, emptyDaily, findDaily, occupied } from '../lib/logic';
 import { fmtStat, STAT_DEFS, statsFor } from '../lib/stats';
 import { useNow } from '../lib/hooks';
 import { useStore } from '../lib/store';
+import { DutyCard } from './DutyCard';
 import { SyncBadge } from './TopBar';
+import { hasRoster } from '../lib/roster';
 import { cx, Dot } from './ui';
 import { AcuityBar, Ring } from './viz';
 
@@ -247,7 +249,7 @@ export function WallView({ onExit }: { onExit: () => void }) {
                 <div key={s.key} className="well min-w-0 px-[0.8vmin] py-[0.7vmin] text-center">
                   <p className="text-[clamp(10px,1.2vmin,16px)] font-semibold text-ink-2">{s.label}</p>
                   <p className="num truncate text-[clamp(14px,2.1vmin,30px)] leading-tight font-semibold">
-                    {s.key === 'bor' ? Math.round(st.values.bor) : fmtStat(st.values[s.key])}
+                    {s.key === 'bor' ? Math.round(st.values.bor) : st.values[s.key] >= 10 ? st.values[s.key].toFixed(1) : fmtStat(st.values[s.key])}
                   </p>
                   <p className="truncate text-[clamp(9px,1vmin,14px)] text-ink-3">{s.unit}</p>
                 </div>
@@ -255,7 +257,12 @@ export function WallView({ onExit }: { onExit: () => void }) {
             </div>
           </div>
 
-          {/* Recent */}
+          {/* ทีมเวรนี้ (ถ้ามีตารางเวร) แทนความเคลื่อนไหวล่าสุด */}
+          {hasRoster(data, ym) ? (
+            <div className="lg:min-h-0 lg:flex-1 [&>.card]:h-full [&>.card]:overflow-hidden">
+              <DutyCard compact />
+            </div>
+          ) : (
           <div className="card flex flex-col overflow-hidden p-[1.8vmin] lg:min-h-0 lg:flex-1">
             <PanelTitle>ความเคลื่อนไหวล่าสุด</PanelTitle>
             {recent.length === 0 ? (
@@ -281,6 +288,7 @@ export function WallView({ onExit }: { onExit: () => void }) {
               </ol>
             )}
           </div>
+          )}
         </div>
       </section>
 

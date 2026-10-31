@@ -9,8 +9,13 @@ export const useNow = (ms = 1000) => {
   return now;
 };
 
-export type View = 'overview' | 'indicators' | 'stats' | 'monthly' | 'wall';
-const VIEWS: View[] = ['overview', 'indicators', 'stats', 'monthly', 'wall'];
+export type View = 'overview' | 'indicators' | 'stats' | 'monthly' | 'wall' | 'roster' | 'staff';
+const VIEWS: View[] = ['overview', 'indicators', 'stats', 'monthly', 'wall', 'roster', 'staff'];
+
+/** เมนูบนสุด: แดชบอร์ด (มีเมนูย่อย 4 หน้า) · ตารางเวร · บุคลากร */
+export type Section = 'dashboard' | 'roster' | 'staff';
+export const DASHBOARD_VIEWS: View[] = ['overview', 'indicators', 'stats', 'monthly'];
+export const sectionOf = (v: View): Section => (v === 'roster' ? 'roster' : v === 'staff' ? 'staff' : 'dashboard');
 
 const fromHash = (): View => {
   const h = window.location.hash.replace('#', '') as View;

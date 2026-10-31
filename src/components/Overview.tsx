@@ -9,6 +9,7 @@ import { sheetLink } from '../lib/sheetApi';
 import { useStore } from '../lib/store';
 import type { DailyKey } from '../types';
 import { BedCard } from './BedCard';
+import { DutyCard } from './DutyCard';
 import { enterFullscreen } from './WallView';
 import { bedAcuitySlices, bedStatusSlices } from '../lib/breakdowns';
 import { CHART_TYPES, DonutChart, SeriesChart, type ChartType } from './charts';
@@ -157,6 +158,11 @@ export function Overview({
             </div>
           </Tile>
         </div>
+      </section>
+
+      {/* ทีมเวรนี้ */}
+      <section className="-mt-6 sm:-mt-8">
+        <DutyCard onOpenRoster={() => onView('roster')} />
       </section>
 
       {/* Beds */}
