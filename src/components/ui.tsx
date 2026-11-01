@@ -362,7 +362,7 @@ export function PageHero({
           {eyebrow}
         </p>
       )}
-      <h1 className="apple-headline mt-1 text-[36px] sm:text-[52px]">{title}</h1>
+      <h1 className="apple-headline page-title text-[36px] sm:text-[52px]">{title}</h1>
       {subtitle && <div className="mx-auto mt-2 max-w-2xl text-[17px] leading-snug text-ink-2 sm:text-[21px]">{subtitle}</div>}
       {actions && <div className="mt-6 flex flex-wrap items-center justify-center gap-3">{actions}</div>}
       {children && <div className="mt-8">{children}</div>}

@@ -52,7 +52,6 @@
   --nav-ink: #1d1d1f;
   --btn-2: #e8e8ed;
   --btn-2-hover: #dcdce1;
-  --card-ring: rgb(0 0 0 / 0.04);
   --footer-bg: #f5f5f7;
   /* หน้าต่าง/ป๊อปอัปยังเป็นกระจกฝ้าแบบ iOS */
   --glass-bg: rgb(255 255 255 / 0.72);
@@ -61,6 +60,13 @@
   --glass-ring: rgb(0 0 0 / 0.05);
   --glass-shadow: 0 1px 2px rgb(0 0 0 / 0.04), 0 14px 40px -18px rgb(0 0 0 / 0.25);
   --glass-blur: blur(24px) saturate(180%);
+  /* พรีเมียม: การ์ดลอยเบา ๆ · แสงพื้นหลัง · หัวข้อไล่เฉด */
+  --card-shadow: 0 0 0 1px rgb(0 0 0 / 0.04), 0 1px 2px rgb(0 0 0 / 0.03), 0 12px 32px -18px rgb(0 0 0 / 0.14);
+  --card-sheen: linear-gradient(180deg, rgb(255 255 255 / 0), rgb(255 255 255 / 0));
+  --amb-1: rgb(0 113 227 / 0.12);
+  --amb-2: rgb(175 82 222 / 0.09);
+  --amb-3: rgb(48 176 199 / 0.08);
+  --title-grad: linear-gradient(180deg, #1d1d1f 40%, #5b5b62 100%);
   color-scheme: light;
 }
 
@@ -85,13 +91,18 @@
   --nav-ink: #e8e8ed;
   --btn-2: #2c2c2e;
   --btn-2-hover: #3a3a3c;
-  --card-ring: rgb(255 255 255 / 0.06);
   --footer-bg: #161617;
   --glass-bg: rgb(38 38 42 / 0.66);
   --glass-bg-strong: rgb(30 30 32 / 0.92);
   --glass-edge: rgb(255 255 255 / 0.12);
   --glass-ring: rgb(255 255 255 / 0.07);
   --glass-shadow: 0 14px 40px -18px rgb(0 0 0 / 0.75);
+  --card-shadow: 0 0 0 1px rgb(255 255 255 / 0.07), inset 0 1px 0 rgb(255 255 255 / 0.06), 0 20px 44px -26px rgb(0 0 0 / 0.9);
+  --card-sheen: linear-gradient(180deg, rgb(255 255 255 / 0.045), rgb(255 255 255 / 0) 58%);
+  --amb-1: rgb(41 151 255 / 0.18);
+  --amb-2: rgb(191 90 242 / 0.11);
+  --amb-3: rgb(100 210 255 / 0.08);
+  --title-grad: linear-gradient(180deg, #ffffff 30%, #a6a6ad 100%);
   color-scheme: dark;
 }
 @media (prefers-color-scheme: dark) {
@@ -115,13 +126,18 @@
     --nav-ink: #e8e8ed;
     --btn-2: #2c2c2e;
     --btn-2-hover: #3a3a3c;
-    --card-ring: rgb(255 255 255 / 0.06);
     --footer-bg: #161617;
     --glass-bg: rgb(38 38 42 / 0.66);
     --glass-bg-strong: rgb(30 30 32 / 0.92);
     --glass-edge: rgb(255 255 255 / 0.12);
     --glass-ring: rgb(255 255 255 / 0.07);
     --glass-shadow: 0 14px 40px -18px rgb(0 0 0 / 0.75);
+  --card-shadow: 0 0 0 1px rgb(255 255 255 / 0.07), inset 0 1px 0 rgb(255 255 255 / 0.06), 0 20px 44px -26px rgb(0 0 0 / 0.9);
+  --card-sheen: linear-gradient(180deg, rgb(255 255 255 / 0.045), rgb(255 255 255 / 0) 58%);
+  --amb-1: rgb(41 151 255 / 0.18);
+  --amb-2: rgb(191 90 242 / 0.11);
+  --amb-3: rgb(100 210 255 / 0.08);
+  --title-grad: linear-gradient(180deg, #ffffff 30%, #a6a6ad 100%);
     color-scheme: dark;
   }
 }
@@ -190,8 +206,8 @@ textarea {
     position: relative;
     isolation: isolate;
     border-radius: var(--radius-card);
-    background: var(--color-surface);
-    box-shadow: 0 0 0 1px var(--card-ring);
+    background: var(--card-sheen), var(--color-surface);
+    box-shadow: var(--card-shadow);
   }
   /* กระจกฝ้า: แถบเมนู หน้าต่าง ป๊อปอัป */
   .glass {
@@ -264,6 +280,15 @@ textarea {
     font-weight: 600;
     letter-spacing: -0.02em;
     line-height: 1.1;
+  }
+
+  /* หัวข้อหน้า: ไล่เฉดเงินเบา ๆ (เว้นขอบบน-ล่างกันสระ/วรรณยุกต์ไทยถูกตัด) */
+  .page-title {
+    background: var(--title-grad);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    padding-block: 0.14em;
   }
 
   .num {
@@ -801,5 +826,97 @@ textarea {
     animation: none;
     stroke-dasharray: none;
     opacity: 0.6;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* หน้าอื่น: แสงนุ่ม ๆ ที่พื้นหลัง (มินิมอล) · หน้าเปลี่ยนแบบเฟด             */
+/* ------------------------------------------------------------------ */
+.ambient {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  pointer-events: none;
+}
+/* เกรนละเอียดมาก ช่วยให้แสงไล่เฉดเนียน ไม่เป็นวง (banding) */
+.ambient::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  opacity: 0.05;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.5 0 0 0 0 0.5 0 0 0 0 0.5 0 0 0 1 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+.ambient span {
+  position: absolute;
+  width: min(920px, 125vw);
+  aspect-ratio: 1;
+  border-radius: 9999px;
+  will-change: transform;
+}
+.ambient .a {
+  left: -22%;
+  top: -38%;
+  background: radial-gradient(closest-side, var(--amb-1), transparent 72%);
+  animation: amb-a 38s ease-in-out infinite alternate;
+}
+.ambient .b {
+  right: -26%;
+  top: -24%;
+  background: radial-gradient(closest-side, var(--amb-2), transparent 72%);
+  animation: amb-b 46s ease-in-out infinite alternate;
+}
+.ambient .c {
+  left: 18%;
+  bottom: -52%;
+  width: min(820px, 115vw);
+  background: radial-gradient(closest-side, var(--amb-3), transparent 72%);
+  animation: amb-c 54s ease-in-out infinite alternate;
+}
+/* มือถือ: เลื่อนแสงลงมาให้เห็นใต้แถบเมนู */
+@media (max-width: 640px) {
+  .ambient span {
+    width: 150vw;
+  }
+  .ambient .a {
+    left: -55%;
+    top: -14%;
+  }
+  .ambient .b {
+    right: -60%;
+    top: 4%;
+  }
+  .ambient .c {
+    width: 130vw;
+    bottom: -30%;
+  }
+}
+@keyframes amb-a {
+  to {
+    transform: translate3d(8%, 6%, 0) scale(1.08);
+  }
+}
+@keyframes amb-b {
+  to {
+    transform: translate3d(-7%, 8%, 0) scale(0.94);
+  }
+}
+@keyframes amb-c {
+  to {
+    transform: translate3d(10%, -6%, 0) scale(1.06);
+  }
+}
+@keyframes page-in {
+  from {
+    opacity: 0;
+  }
+}
+.page-in {
+  animation: page-in 0.45s var(--ease-apple) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .ambient span,
+  .page-in {
+    animation: none;
   }
 }

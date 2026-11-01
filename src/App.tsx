@@ -161,6 +161,14 @@ export default function App() {
     <StoreContext.Provider value={store}>
       <SyncContext.Provider value={sync}>
       <div className="screen-only min-h-dvh">
+        {/* แสงนุ่ม ๆ ที่พื้นหลังของหน้าอื่น (หน้าแรกมีแสงของตัวเอง) */}
+        {!apple && (
+          <div aria-hidden className="ambient">
+            <span className="a" />
+            <span className="b" />
+            <span className="c" />
+          </div>
+        )}
         <TopBar
           view={view}
           onView={(v) => navigate(v)}
@@ -178,6 +186,8 @@ export default function App() {
           <main className="mx-auto max-w-[1080px] px-4 pb-20 sm:px-6 sm:pb-28">
             <Lazy>
             {sectionOf(view) === 'dashboard' && <DashboardNav view={view} onView={(v) => navigate(v)} />}
+            {/* เปลี่ยนหน้าแบบเฟดนุ่ม ๆ (key = หน้า → เล่นใหม่ทุกครั้งที่เปลี่ยน) */}
+            <div key={view} className="page-in">
             {view === 'admin' && <AdminPage onGo={navigate} onSettings={() => setSettings(true)} />}
             {view === 'news' && <NewsPage startNew={intent === 'new'} onStarted={started} />}
             {view === 'kpi' && <KpiPage startEntry={intent === 'entry'} onStarted={started} />}
@@ -221,6 +231,7 @@ export default function App() {
                 pdfBusy={!!pdfJob}
               />
             )}
+            </div>
             </Lazy>
           </main>
         )}
