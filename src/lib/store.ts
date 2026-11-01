@@ -71,6 +71,31 @@ const write = (key: string, value: unknown) => {
 const fingerprint = (s: Snapshot) => JSON.stringify([s.beds, s.daily, s.logs, s.stats, s.gids, s.spreadsheetUrl]);
 const teamPrint = (s: Snapshot) =>
   s.staff === undefined ? null : JSON.stringify([s.staff, s.roster, s.docs, s.news, s.kpis, s.kpiData, s.links]);
+/* ------------------------------------------------------------------ */
+/* พักการดึงข้อมูลระหว่างพิมพ์: หน้าเว็บจะไม่เปลี่ยนใต้มือขณะกรอกข้อมูล     */
+/* (ป้องกันช่องกรอกหลุดโฟกัส / คีย์บอร์ดมือถือหุบ / คำที่กำลังพิมพ์ภาษาไทยขาด) */
+/* ------------------------------------------------------------------ */
+const TYPING_PAUSE_MS = 20_000;
+let lastTyping = 0;
+if (typeof window !== 'undefined') {
+  ['keydown', 'input', 'compositionstart', 'compositionupdate', 'paste'].forEach((ev) =>
+    window.addEventListener(ev, () => (lastTyping = Date.now()), true),
+  );
+}
+const NOT_TEXT = new Set(['checkbox', 'radio', 'button', 'submit', 'reset', 'file', 'range', 'color', 'image']);
+const isTextField = (el: Element | null) =>
+  !!el &&
+  (el instanceof HTMLTextAreaElement ||
+    el instanceof HTMLSelectElement ||
+    (el instanceof HTMLInputElement && !NOT_TEXT.has(el.type)) ||
+    (el as HTMLElement).isContentEditable);
+/** กำลังกรอกฟอร์มในหน้าต่าง (พักจนกว่าจะออกจากช่อง) หรือเพิ่งพิมพ์ในช่องบนหน้า (พัก 20 วินาที) */
+export const userIsTyping = () => {
+  const el = document.activeElement;
+  if (!isTextField(el)) return false;
+  return !!el!.closest('[role="dialog"]') || Date.now() - lastTyping < TYPING_PAUSE_MS;
+};
+
 /** บุคลากร/ตารางเวรเปลี่ยนไม่บ่อย: ดึงทุก ๆ 6 รอบ (ประมาณ 30 วินาที) */
 const TEAM_EVERY = 6;
 
@@ -190,13 +215,15 @@ export function useIcuStore() {
   /** ดึงข้อมูลล่าสุดจากชีต (ข้ามรอบถ้ากำลังบันทึก เพื่อไม่ให้ค่าเก่าทับค่าที่เพิ่งแก้) */
   const pull = useCallback(async () => {
     const cfg = configRef.current;
-    if (!cfg.url || inFlight.current || pending.current > 0) return;
+    if (!cfg.url || inFlight.current || pending.current > 0 || userIsTyping()) return;
     inFlight.current = true;
     try {
       const full = pollCount.current % TEAM_EVERY === 0;
       pollCount.current += 1;
       const snap = await fetchSnapshot(cfg, full ? undefined : 'core');
-      if (pending.current === 0 && configRef.current.url === cfg.url) applySnapshot(snap);
+      // เริ่มพิมพ์ระหว่างรอข้อมูล → ทิ้งรอบนี้ไป (รอบถัดไปหลังพิมพ์เสร็จจะได้ข้อมูลล่าสุดเอง)
+      if (pending.current === 0 && configRef.current.url === cfg.url && !userIsTyping()) applySnapshot(snap);
+      else pollCount.current = 0;
     } catch (e) {
       setState(navigator.onLine ? 'error' : 'offline');
       setError(e instanceof Error ? e.message : String(e));
