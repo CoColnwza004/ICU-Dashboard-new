@@ -1,7 +1,7 @@
 import { ChevronRight, Star } from 'lucide-react';
 import { fmtDateLong } from '../lib/date';
 import { occupied } from '../lib/logic';
-import { currentDuty, hasRoster, isNurse, ratioText, SHIFT_BY_KEY, shortName } from '../lib/roster';
+import { currentDuty, hasRoster, isNurse, ratioText, realName, SHIFT_BY_KEY, shortName } from '../lib/roster';
 import { useNow } from '../lib/hooks';
 import { useStore } from '../lib/store';
 import { Avatar } from './Avatar';
@@ -86,7 +86,7 @@ export function DutyCard({ onOpenRoster, compact }: { onOpenRoster?: () => void;
       )}
       {lead && !compact && (
         <p className="mt-4 text-[12px] text-ink-3">
-          หัวหน้าเวร: <span className="text-ink-2">{lead.staff?.name ?? lead.name}</span>
+          หัวหน้าเวร: <span className="text-ink-2">{realName(lead.staff?.name ?? lead.name)}</span>
         </p>
       )}
     </div>

@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { Staff, StaffGroup } from '../types';
 import { todayKey } from '../lib/date';
 import { nextStaffId, saveStaff } from '../lib/logic';
-import { parseCode, rosterFor, SHIFT_BY_KEY } from '../lib/roster';
+import { joinName, NAME_PREFIXES, parseCode, realName, rosterFor, SHIFT_BY_KEY, splitName, type NameParts } from '../lib/roster';
 import { sheetLink } from '../lib/sheetApi';
 import { useStore } from '../lib/store';
 import { Avatar } from './Avatar';
@@ -334,6 +334,7 @@ function StaffPanel({ value, onClose }: { value: Staff | 'new' | null; onClose: 
   const { data, commit, toast } = useStore();
   const [form, setForm] = useState<Staff>(blankStaff('S01', 1));
   const [skills, setSkills] = useState('');
+  const [parts, setParts] = useState<NameParts>({ prefix: '', first: '', last: '' });
   const [photo, setPhoto] = useState<string | undefined>();
   const fileRef = useRef<HTMLInputElement>(null);
   const isNew = value === 'new';
@@ -345,12 +346,19 @@ function StaffPanel({ value, onClose }: { value: Staff | 'new' | null; onClose: 
         ? blankStaff(nextStaffId(data.staff), Math.max(0, ...data.staff.map((x) => x.order)) + 1)
         : value;
     setForm(s);
+    setParts(splitName(s.name));
     setSkills(s.skills.join(', '));
     setPhoto(undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value]);
 
   const set = <K extends keyof Staff>(k: K, v: Staff[K]) => setForm((f) => ({ ...f, [k]: v }));
+  /** แก้คำนำหน้า / ชื่อจริง / นามสกุล → รวมเป็น “ชื่อ-สกุล” ช่องเดียวในชีต */
+  const setPart = (k: keyof NameParts, v: string) => {
+    const next = { ...parts, [k]: v };
+    setParts(next);
+    set('name', joinName(next));
+  };
 
   const pick = async (file?: File) => {
     if (!file) return;
@@ -362,10 +370,10 @@ function StaffPanel({ value, onClose }: { value: Staff | 'new' | null; onClose: 
   };
 
   const save = () => {
-    if (!form.name.trim()) return;
+    if (!parts.first.trim()) return;
     const s: Staff = {
       ...form,
-      name: form.name.trim(),
+      name: joinName(parts),
       skills: skills
         .split(/[,،;]/)
         .map((x) => x.trim())
@@ -382,14 +390,14 @@ function StaffPanel({ value, onClose }: { value: Staff | 'new' | null; onClose: 
     <Modal
       open={!!value}
       onClose={onClose}
-      title={isNew ? 'เพิ่มบุคลากร' : form.nickname || form.name || 'บุคลากร'}
+      title={isNew ? 'เพิ่มบุคลากร' : realName(form.name) || 'บุคลากร'}
       subtitle={isNew ? 'ชื่อและรูปจะแสดงในผังองค์กรและตารางเวร' : `รหัส ${form.id}`}
       footer={
         <>
           <Button variant="ghost" onClick={onClose}>
             ยกเลิก
           </Button>
-          <Button variant="primary" onClick={save} disabled={!form.name.trim()}>
+          <Button variant="primary" onClick={save} disabled={!parts.first.trim()}>
             บันทึก
           </Button>
         </>
@@ -408,10 +416,37 @@ function StaffPanel({ value, onClose }: { value: Staff | 'new' | null; onClose: 
           </div>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="ชื่อ-สกุล *">
-            <input className="field" value={form.name} onChange={(e) => set('name', e.target.value)} placeholder="เช่น นางสาวกมลวรรณ ใจดี" />
+        <div className="grid gap-3 sm:grid-cols-[120px_1fr_1fr]">
+          <Field label="คำนำหน้า">
+            <input
+              className="field"
+              list="name-prefixes"
+              value={parts.prefix}
+              onChange={(e) => setPart('prefix', e.target.value)}
+              placeholder="นางสาว"
+              autoComplete="honorific-prefix"
+            />
+            <datalist id="name-prefixes">
+              {NAME_PREFIXES.map((p) => (
+                <option key={p} value={p} />
+              ))}
+            </datalist>
           </Field>
+          <Field label="ชื่อจริง *">
+            <input
+              className="field"
+              value={parts.first}
+              onChange={(e) => setPart('first', e.target.value)}
+              placeholder="เช่น กมลวรรณ"
+              autoComplete="given-name"
+            />
+          </Field>
+          <Field label="นามสกุล">
+            <input className="field" value={parts.last} onChange={(e) => setPart('last', e.target.value)} placeholder="เช่น ใจดี" autoComplete="family-name" />
+          </Field>
+        </div>
+        {form.name && <p className="-mt-3 text-[12px] text-ink-3">แสดงในผังและตารางเวรเป็น “{form.name}”</p>}
+        <div className="grid gap-3 sm:grid-cols-2">
           <Field label="ชื่อเล่น">
             <input className="field" value={form.nickname} onChange={(e) => set('nickname', e.target.value)} />
           </Field>

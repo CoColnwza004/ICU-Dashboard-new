@@ -13,7 +13,7 @@ import {
   rosterFor,
   shiftAt,
   SHIFTS,
-  shortName,
+  realName,
   teamOn,
   weekdayShort,
   type DayCode,
@@ -221,10 +221,12 @@ export function RosterPage({
                         <Avatar staff={t.staff} name={t.name} size={36} ring={t.lead} />
                         <div className="min-w-0">
                           <p className="truncate text-[14px] font-medium">
-                            {shortName(t.staff, t.name)}
+                            {realName(t.staff?.name ?? t.name)}
                             {t.lead && <span className="ml-1.5 text-[11px] font-normal text-[#8a5c00]">★ หัวหน้าเวร</span>}
                           </p>
-                          <p className="truncate text-[11px] text-ink-3">{t.staff?.position || t.staff?.group || ''}</p>
+                          <p className="truncate text-[11px] text-ink-3">
+                            {[t.staff?.nickname && `(${t.staff.nickname})`, t.staff?.position || t.staff?.group].filter(Boolean).join(' · ')}
+                          </p>
                         </div>
                       </li>
                     ))}
@@ -307,8 +309,12 @@ export function RosterPage({
                         <span className="flex items-center gap-2">
                           <Avatar staff={l.staff} name={l.name} size={26} />
                           <span className="min-w-0">
-                            <span className="block max-w-[120px] truncate text-[12px] font-medium">{shortName(l.staff, l.name)}</span>
-                            <span className="block max-w-[120px] truncate text-[10px] text-ink-3">{l.staff?.group ?? 'ไม่อยู่ในรายชื่อ'}</span>
+                            <span className="block max-w-[150px] truncate text-[12px] font-medium" title={l.staff?.name ?? l.name}>
+                              {realName(l.staff?.name ?? l.name)}
+                            </span>
+                            <span className="block max-w-[150px] truncate text-[10px] text-ink-3">
+                              {l.staff ? [l.staff.nickname && `(${l.staff.nickname})`, l.staff.group].filter(Boolean).join(' · ') : 'ไม่อยู่ในรายชื่อ'}
+                            </span>
                           </span>
                         </span>
                       </td>
@@ -379,7 +385,7 @@ export function RosterPage({
             const l = lines.find((x) => keyOf(x) === picker.key)!;
             return codeAt(l, picker.day);
           })()}
-          title={`${shortName(lines.find((x) => keyOf(x) === picker.key)?.staff ?? null, lines.find((x) => keyOf(x) === picker.key)?.name)} · ${picker.day} ${fmtMonth(ym)}`}
+          title={`${realName(lines.find((x) => keyOf(x) === picker.key)?.staff?.name ?? lines.find((x) => keyOf(x) === picker.key)?.name ?? '')} · ${picker.day} ${fmtMonth(ym)}`}
           onChange={(code) => setCode(picker.key, picker.day, code)}
           onClose={closePicker}
         />

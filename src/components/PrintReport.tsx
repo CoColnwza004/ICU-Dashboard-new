@@ -3,7 +3,7 @@ import { fmtDateLong, fmtDateShort, fmtDateTime, fmtDayMonth, fmtMonth, shiftDat
 import { countsFromBeds, emptyDaily, findDaily, monthlySummary } from '../lib/logic';
 import { computeStats, fmtStat, STAT_DEFS, statsFor } from '../lib/stats';
 import { useStore } from '../lib/store';
-import { daysInMonth, isWeekend, parseCode, rosterFor, SHIFTS, weekdayShort } from '../lib/roster';
+import { daysInMonth, isWeekend, parseCode, realName, rosterFor, SHIFTS, weekdayShort } from '../lib/roster';
 import { CodeChip } from './RosterPage';
 import { admitAcuitySlices, bedAcuitySlices, bedStatusSlices, dischargeSlices, sumSlices } from '../lib/breakdowns';
 import { DonutChart, SeriesChart, type Slice } from './charts';
@@ -306,8 +306,8 @@ export function PrintReport({ job, mode = 'print' }: { job: PrintJob; mode?: 'pr
             {lines.map((l, i) => (
               <tr key={i}>
                 <td className="truncate border border-black/15 px-1.5 py-1 text-[9px]">
-                  {l.staff?.nickname ? `${l.staff.nickname} · ` : ''}
-                  {l.name}
+                  {realName(l.staff?.name ?? l.name)}
+                  {l.staff?.nickname ? ` (${l.staff.nickname})` : ''}
                 </td>
                 {days.map((d) => (
                   <td key={d} className={`${cell} ${isWeekend(ym, d) ? 'bg-black/5' : ''}`}>

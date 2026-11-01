@@ -33,7 +33,7 @@ export function Avatar({
   const src = photoUrl(staff?.photo ?? '');
   const [failed, setFailed] = useState<string | null>(null);
   const i = hash(staff?.id ?? label) % TINTS.length;
-  const initial = (staff?.nickname || firstName(label)).slice(0, 1) || '?';
+  const initial = firstName(label).slice(0, 1) || '?';
   return (
     <span
       className={cx(

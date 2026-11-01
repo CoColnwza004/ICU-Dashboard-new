@@ -143,8 +143,38 @@ export const isWeekend = (ym: string, day: number) => {
   return d === 0 || d === 6;
 };
 
-/** ชื่อที่ใช้แสดงแบบสั้น: ชื่อเล่น หรือชื่อจริงไม่มีคำนำหน้า */
+/* ------------------------------------------------------------------ */
+/* ชื่อ: แท็บ Staff เก็บ “ชื่อ-สกุล” ช่องเดียว เช่น “นางสาวกมลวรรณ ใจดี”     */
+/* ฟอร์มบนเว็บแยกเป็น คำนำหน้า / ชื่อจริง / นามสกุล แล้วรวมกลับเป็นช่องเดิม  */
+/* ------------------------------------------------------------------ */
+export const NAME_PREFIXES = ['นาย', 'นาง', 'นางสาว', 'นพ.', 'พญ.', 'ดร.', 'พว.', 'ผศ.', 'รศ.', 'ศ.'];
 const PREFIX = /^(นางสาว|น\.ส\.|นาง|นาย|ดร\.|นพ\.|พญ\.|พว\.|ผศ\.|รศ\.|ศ\.)\s*/;
-export const firstName = (name: string) => name.replace(PREFIX, '').split(/\s+/)[0] ?? name;
-export const shortName = (s: { name: string; nickname?: string } | null, fallback = '') =>
-  s ? s.nickname || firstName(s.name) : firstName(fallback);
+
+export interface NameParts {
+  prefix: string;
+  first: string;
+  last: string;
+}
+
+export const splitName = (full: string): NameParts => {
+  const s = (full || '').trim();
+  const m = s.match(PREFIX);
+  const rest = s.slice(m ? m[0].length : 0).trim();
+  const i = rest.search(/\s/);
+  return { prefix: m ? m[1] : '', first: i < 0 ? rest : rest.slice(0, i), last: i < 0 ? '' : rest.slice(i).trim() };
+};
+
+/** คำนำหน้าติดกับชื่อแบบที่ใช้ทั่วไป เช่น “นางสาวกมลวรรณ ใจดี”, “นพ.สมชาย ดีงาม” */
+export const joinName = ({ prefix, first, last }: NameParts) =>
+  `${prefix.trim()}${first.trim()}${last.trim() ? ` ${last.trim()}` : ''}`.trim();
+
+export const firstName = (name: string) => splitName(name).first || name;
+
+/** ชื่อจริง + นามสกุล (ไม่มีคำนำหน้า) */
+export const realName = (name: string) => {
+  const p = splitName(name);
+  return [p.first, p.last].filter(Boolean).join(' ') || name;
+};
+
+/** ชื่อที่ใช้แสดงแบบสั้น: ชื่อจริง (ไม่มีคำนำหน้า) — ชื่อเล่นเป็นข้อมูลรอง */
+export const shortName = (s: { name: string; nickname?: string } | null, fallback = '') => firstName(s ? s.name : fallback);
