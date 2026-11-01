@@ -1,4 +1,4 @@
-import { Camera, LayoutList, Network, Search, Star, UserPlus } from 'lucide-react';
+import { Camera, LayoutList, Network, Search, UserPlus } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { Staff, StaffGroup } from '../types';
 import { todayKey } from '../lib/date';
@@ -7,6 +7,7 @@ import { joinName, NAME_PREFIXES, parseCode, realName, rosterFor, SHIFT_BY_KEY, 
 import { sheetLink } from '../lib/sheetApi';
 import { useStore } from '../lib/store';
 import { Avatar } from './Avatar';
+import { OrgChart } from './OrgChart';
 import { Button, cx, Empty, Modal, PageHero, Segmented, Switch } from './ui';
 
 export const STAFF_GROUPS: StaffGroup[] = ['แพทย์', 'พยาบาล', 'ผู้ช่วยพยาบาล', 'พนักงานช่วยเหลือคนไข้', 'อื่นๆ'];
@@ -119,11 +120,8 @@ export function StaffPage({ startNew, onStarted }: { startNew?: boolean; onStart
           </Empty>
         </div>
       ) : mode === 'org' ? (
-        <section className="card overflow-x-auto p-6 sm:p-8">
+        <section>
           <OrgChart staff={active} duty={duty} onOpen={open} />
-          {isStaff && (
-            <p className="mt-6 text-[12px] text-ink-3">ผังสร้างจากช่อง “หัวหน้า (รหัส)” ของแต่ละคน · แตะที่ชื่อเพื่อแก้ไข</p>
-          )}
         </section>
       ) : (
         <section className="space-y-5">
@@ -207,82 +205,6 @@ function PersonCard({ s, duty, onOpen }: { s: Staff; duty?: string; onOpen?: () 
         <p className="mt-auto pt-3 text-[11px] text-ink-3">
           วันนี้: <span className="font-medium text-ink-2">{duty}</span>
         </p>
-      )}
-    </Tag>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/* ผังองค์กร: กล่องซ้อนกันตามสายบังคับบัญชา (ใช้ได้ทั้งจอใหญ่และมือถือ) */
-/* ------------------------------------------------------------------ */
-
-function OrgChart({ staff, duty, onOpen }: { staff: Staff[]; duty: Map<string, string>; onOpen?: (s: Staff) => void }) {
-  const ids = new Set(staff.map((s) => s.id));
-  const children = new Map<string, Staff[]>();
-  const roots: Staff[] = [];
-  staff.forEach((s) => {
-    if (s.reportsTo && ids.has(s.reportsTo) && s.reportsTo !== s.id) {
-      children.set(s.reportsTo, [...(children.get(s.reportsTo) ?? []), s]);
-    } else roots.push(s);
-  });
-  // สร้างผังแบบเรียกฟังก์ชันตรง ๆ (ไม่เก็บสถานะระหว่าง render) และกันวนซ้ำถ้าข้อมูลหัวหน้าวนกัน
-  const renderNode = (s: Staff, depth: number, path: Set<string>): ReactNode => {
-    if (path.has(s.id)) return null;
-    const next = new Set(path).add(s.id);
-    const kids = (children.get(s.id) ?? []).filter((k) => !next.has(k.id));
-    const hasKids = (k: Staff) => (children.get(k.id) ?? []).length > 0;
-    const leaves = kids.filter((k) => !hasKids(k));
-    const branches = kids.filter(hasKids);
-    return (
-      <div key={s.id} className="flex flex-col items-center">
-        <OrgCard s={s} duty={duty.get(s.id)} onOpen={onOpen && (() => onOpen(s))} big={depth === 0} />
-        {kids.length > 0 && (
-          <>
-            <span className="h-6 w-px bg-line-strong" aria-hidden />
-            <div className="well flex flex-col items-center gap-4 rounded-[20px] p-2 sm:gap-6 sm:rounded-[24px] sm:p-5">
-              {branches.length > 0 && (
-                <div className="flex flex-wrap items-start justify-center gap-3 sm:gap-5">{branches.map((k) => renderNode(k, depth + 1, next))}</div>
-              )}
-              {leaves.length > 0 && (
-                <div className="flex max-w-[860px] flex-wrap justify-center gap-2 sm:gap-3">{leaves.map((k) => renderNode(k, depth + 1, next))}</div>
-              )}
-            </div>
-          </>
-        )}
-      </div>
-    );
-  };
-
-  return (
-    <div className="flex min-w-fit flex-wrap items-start justify-center gap-8">
-      {roots.map((r) => renderNode(r, 0, new Set()))}
-    </div>
-  );
-}
-
-/** การ์ดในผังบริหารงาน: ชื่อ-สกุลจริงเป็นหัวเรื่อง (ชื่อเล่นเป็นรอง) */
-function OrgCard({ s, duty, onOpen, big }: { s: Staff; duty?: string; onOpen?: () => void; big?: boolean }) {
-  const Tag = onOpen ? 'button' : 'div';
-  return (
-    <Tag
-      {...(onOpen ? { type: 'button' as const, onClick: onOpen } : {})}
-      className={cx(
-        'glass glass-strong flex flex-col items-center rounded-[22px] text-center',
-        onOpen && 'transition-transform duration-300 hover:-translate-y-0.5',
-        big ? 'w-[230px] px-4 pt-5 pb-4 sm:w-[260px]' : 'w-[138px] px-2.5 pt-3 pb-2.5 sm:w-[164px] sm:px-3',
-      )}
-    >
-      <Avatar staff={s} size={big ? 92 : 56} className={big ? 'shadow-[0_10px_28px_-12px_rgb(20_30_60/0.5)]' : undefined} />
-      <span className={cx('mt-2.5 line-clamp-2 w-full leading-snug font-semibold text-balance', big ? 'text-[16px]' : 'text-[13px]')}>{s.name}</span>
-      {s.nickname && <span className={cx('w-full truncate text-ink-3', big ? 'text-[12px]' : 'text-[11px]')}>({s.nickname})</span>}
-      <span className={cx('mt-1 line-clamp-2 w-full leading-snug', big ? 'text-[12px] font-medium text-accent' : 'text-[11px] text-ink-2')}>
-        {s.position || s.group}
-      </span>
-      {duty && (
-        <span className="mt-1 inline-flex items-center gap-0.5 text-[10px] text-ink-3">
-          {duty.includes('★') && <Star className="size-2.5 fill-warn text-warn" />}
-          {duty.replace(' ★', '')}
-        </span>
       )}
     </Tag>
   );
