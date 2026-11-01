@@ -12,9 +12,16 @@
  *   Stats — สถิติการใช้เตียงรายเดือน (ADC, ALOS, BOR, BTR, TOI คำนวณด้วยสูตรในชีต)
  *   Staff — รายชื่อบุคลากร (ชื่อ ตำแหน่ง รูป หัวหน้า) ใช้ทำผังองค์กร
  *   Roster — ตารางเวรรายเดือน (1 แถว = 1 คน ต่อ 1 เดือน, คอลัมน์ 1–31 = วันที่)
- *   Docs   — คู่มือ / SOP / แนวปฏิบัติ / ระเบียบ (ไฟล์ PDF เก็บใน Google Drive)
+ *   Docs   — คู่มือ / SOP / แนวทางการรักษา / เอกสารดาวน์โหลด (ไฟล์ PDF เก็บใน Google Drive)
+ *   News   — ข่าวสาร / ประกาศ
+ *   KPI    — นิยามตัวชี้วัดคุณภาพ (Quality KPI) และเป้าหมาย
+ *   KPIData — ผล KPI รายเดือน (ตัวตั้ง / ตัวหาร)
+ *   Links  — ลิงก์ Google Forms
  *
- * ครั้งแรกหลังวางโค้ดเวอร์ชันนี้: เลือกฟังก์ชัน authorize แล้วกด Run เพื่ออนุญาตให้บันทึกรูปลง Google Drive
+ * ครั้งแรกหลังวางโค้ดเวอร์ชันนี้:
+ *   1) เลือกฟังก์ชัน authorize แล้วกด Run เพื่ออนุญาตให้บันทึกไฟล์ลง Google Drive
+ *   2) กลับไปที่ชีต เมนู ICU Smart Center › ตั้ง / เปลี่ยนรหัสเจ้าหน้าที่
+ *      (ทุกคนเปิดดูเว็บได้ แต่การแก้ไข/บันทึกข้อมูลต้องใช้รหัสนี้)
  *
  * แก้ไขข้อมูลในชีตได้ตามปกติ เว็บจะดึงข้อมูลใหม่ภายในไม่กี่วินาที
  * และเมื่อแก้ไขบนเว็บ ข้อมูลจะถูกเขียนกลับมาที่ชีตนี้ทันที
@@ -24,7 +31,17 @@
 // (ไม่บังคับ) ตั้งรหัสลับ แล้วใส่รหัสเดียวกันในหน้าเชื่อมต่อของเว็บ
 const API_TOKEN = '';
 
-const TAB = { beds: 'Beds', daily: 'Daily', log: 'Log', stats: 'Stats', staff: 'Staff', roster: 'Roster', docs: 'Docs' };
+const TAB = {
+  beds: 'Beds', daily: 'Daily', log: 'Log', stats: 'Stats', staff: 'Staff', roster: 'Roster', docs: 'Docs',
+  news: 'News', kpi: 'KPI', kpiData: 'KPIData', links: 'Links',
+};
+
+// รหัสเจ้าหน้าที่: เก็บเฉพาะค่า hash ใน Script Properties (ตั้งจากเมนูในชีต)
+const PIN_PROP = 'STAFF_PIN_HASH';
+const SALT_PROP = 'STAFF_PIN_SALT';
+const PIN_MIN_LENGTH = 6;
+const PIN_MAX_FAILS = 10; // ใส่ผิดเกินนี้ → ล็อก 10 นาที
+const PIN_LOCK_SECONDS = 600;
 const DEFAULT_BED_COUNT = 8;
 
 const BED_COLS = [
@@ -101,9 +118,49 @@ const DOC_CATEGORIES = [
   'ควบคุมการติดเชื้อ', 'การดูแลผู้ป่วยวิกฤต', 'ภาวะฉุกเฉิน', 'ยาและสารน้ำ',
   'การรับ-ส่งต่อผู้ป่วย', 'อุปกรณ์การแพทย์', 'ระเบียบหน่วยงาน', 'อื่นๆ',
 ];
-const DOC_TYPES = ['SOP', 'แนวปฏิบัติ (CPG)', 'ระเบียบ / ข้อบังคับ', 'คู่มือ', 'แบบฟอร์ม'];
+const DOC_TYPES = ['SOP', 'แนวปฏิบัติ (CPG)', 'ระเบียบ / ข้อบังคับ', 'คู่มือ', 'แบบฟอร์ม', 'เอกสารทั่วไป'];
 const DOC_ACTIVE = 'ใช้งาน';
 const DOC_INACTIVE = 'ยกเลิก';
+const FILE_FOLDER = 'ICU Smart Center - ไฟล์ข่าวสาร';
+
+const NEWS_COLS = ['id', 'title', 'body', 'category', 'date', 'image', 'attachment', 'pinned', 'author', 'status', 'updatedAt'];
+const NEWS_HEAD = [
+  'รหัส', 'หัวข้อ', 'รายละเอียด', 'หมวด', 'วันที่', 'รูปภาพ (ลิงก์)', 'ไฟล์แนบ (ลิงก์)', 'ปักหมุด', 'ผู้ประกาศ', 'สถานะ', 'อัปเดตล่าสุด',
+];
+const NEWS_CATEGORIES = ['ประกาศ', 'ข่าวสาร', 'กิจกรรม', 'อบรม / ประชุม', 'ด่วน'];
+const NEWS_PUBLISHED = 'เผยแพร่';
+const NEWS_HIDDEN = 'ซ่อน';
+
+const KPI_COLS = [
+  'id', 'name', 'group', 'unit', 'multiplier', 'target', 'direction',
+  'numeratorLabel', 'numeratorSource', 'denominatorLabel', 'denominatorSource', 'description', 'order', 'active',
+];
+const KPI_HEAD = [
+  'รหัส', 'ชื่อตัวชี้วัด', 'กลุ่ม', 'หน่วย', 'ตัวคูณ', 'เป้าหมาย', 'ทิศทาง',
+  'ตัวตั้ง (คำอธิบาย)', 'ที่มาตัวตั้ง', 'ตัวหาร (คำอธิบาย)', 'ที่มาตัวหาร', 'คำอธิบาย / นิยาม', 'ลำดับ', 'สถานะ',
+];
+const KPI_SOURCES = [
+  'กรอกเอง', 'วันนอนรวม', 'วันใช้เครื่องช่วยหายใจ', 'วันใส่ C-Line', 'วันใส่ Foley', 'จำนวนรับใหม่', 'จำนวนจำหน่าย', 'จำนวนเสียชีวิต',
+];
+// นิยามตั้งต้น (ไม่ใส่เป้าหมาย — ให้หน่วยงานกำหนดเอง)
+const KPI_SEED = [
+  ['K01', 'อัตราปอดอักเสบจากการใช้เครื่องช่วยหายใจ (VAP)', 'การติดเชื้อ', 'ครั้ง / 1,000 วันใช้เครื่องช่วยหายใจ', 1000, '', '≤', 'จำนวนครั้งการเกิด VAP', 'กรอกเอง', 'จำนวนวันใช้เครื่องช่วยหายใจ', 'วันใช้เครื่องช่วยหายใจ', '', 1, 'ใช้งาน'],
+  ['K02', 'อัตราการติดเชื้อในกระแสเลือดจากสายสวนหลอดเลือดดำส่วนกลาง (CLABSI)', 'การติดเชื้อ', 'ครั้ง / 1,000 วันใส่ C-Line', 1000, '', '≤', 'จำนวนครั้งการเกิด CLABSI', 'กรอกเอง', 'จำนวนวันใส่ C-Line', 'วันใส่ C-Line', '', 2, 'ใช้งาน'],
+  ['K03', 'อัตราการติดเชื้อทางเดินปัสสาวะจากการคาสายสวน (CAUTI)', 'การติดเชื้อ', 'ครั้ง / 1,000 วันใส่ Foley', 1000, '', '≤', 'จำนวนครั้งการเกิด CAUTI', 'กรอกเอง', 'จำนวนวันใส่ Foley', 'วันใส่ Foley', '', 3, 'ใช้งาน'],
+  ['K04', 'อัตราการเกิดแผลกดทับรายใหม่', 'ความปลอดภัย', 'ครั้ง / 1,000 วันนอน', 1000, '', '≤', 'จำนวนแผลกดทับที่เกิดใหม่ใน ICU', 'กรอกเอง', 'จำนวนวันนอนรวม', 'วันนอนรวม', '', 4, 'ใช้งาน'],
+  ['K05', 'อัตราการเลื่อนหลุดของท่อช่วยหายใจโดยไม่ได้วางแผน', 'ความปลอดภัย', 'ครั้ง / 100 วันใช้เครื่องช่วยหายใจ', 100, '', '≤', 'จำนวนครั้งท่อช่วยหายใจเลื่อนหลุด', 'กรอกเอง', 'จำนวนวันใช้เครื่องช่วยหายใจ', 'วันใช้เครื่องช่วยหายใจ', '', 5, 'ใช้งาน'],
+  ['K06', 'อัตราการกลับเข้า ICU ซ้ำภายใน 48 ชั่วโมง', 'ผลลัพธ์', '%', 100, '', '≤', 'จำนวนผู้ป่วยกลับเข้า ICU ซ้ำภายใน 48 ชม.', 'กรอกเอง', 'จำนวนผู้ป่วยจำหน่ายจาก ICU', 'จำนวนจำหน่าย', '', 6, 'ใช้งาน'],
+  ['K07', 'อัตราการเสียชีวิตใน ICU', 'ผลลัพธ์', '%', 100, '', '≤', 'จำนวนผู้ป่วยเสียชีวิต', 'จำนวนเสียชีวิต', 'จำนวนผู้ป่วยจำหน่ายจาก ICU (รวมเสียชีวิต)', 'จำนวนจำหน่าย', '', 7, 'ใช้งาน'],
+  ['K08', 'ร้อยละการปฏิบัติตาม VAP / HAP bundle', 'กระบวนการ', '%', 100, '', '≥', 'จำนวนครั้งที่ปฏิบัติครบทุกข้อ', 'กรอกเอง', 'จำนวนครั้งที่ตรวจสอบ', 'กรอกเอง', '', 8, 'ใช้งาน'],
+  ['K09', 'ร้อยละการทำความสะอาดมือถูกต้อง (Hand hygiene)', 'กระบวนการ', '%', 100, '', '≥', 'จำนวนโอกาสที่ทำความสะอาดมือถูกต้อง', 'กรอกเอง', 'จำนวนโอกาสที่สังเกตทั้งหมด', 'กรอกเอง', '', 9, 'ใช้งาน'],
+];
+const KPI_DATA_COLS = ['month', 'kpiId', 'numerator', 'denominator', 'note', 'updatedAt'];
+const KPI_DATA_HEAD = ['เดือน (yyyy-mm)', 'รหัสตัวชี้วัด', 'ตัวตั้ง', 'ตัวหาร', 'หมายเหตุ', 'อัปเดตล่าสุด'];
+
+const LINK_COLS = ['id', 'title', 'description', 'url', 'category', 'order', 'active'];
+const LINK_HEAD = ['รหัส', 'ชื่อแบบฟอร์ม', 'คำอธิบาย', 'ลิงก์ Google Forms', 'หมวด', 'ลำดับ', 'สถานะ'];
+const LINK_CATEGORIES = ['แบบประเมิน', 'รายงานอุบัติการณ์', 'ลงทะเบียน', 'อื่นๆ'];
+
 /** ช่องที่เป็นวันที่อย่างเดียว (ไม่มีเวลา) */
 const DATE_ONLY = { date: true, effectiveDate: true, reviewDate: true };
 
@@ -121,24 +178,36 @@ function doGet(e) {
   return respond_(function () {
     checkToken_(e && e.parameter && e.parameter.token);
     ensureSetup_();
-    return snapshot_(e && e.parameter && e.parameter.parts);
+    // ผู้เข้าชมทั่วไป: อ่านได้อย่างเดียว ไม่ส่งลิงก์ชีตออกไป
+    return snapshot_(e && e.parameter && e.parameter.parts, false);
   });
 }
 
+/**
+ * การเขียนทุกครั้งต้องมีรหัสเจ้าหน้าที่ (body.pin)
+ *   { pin, action: 'verify' }             → ตรวจรหัส (เข้าสู่ระบบ)
+ *   { pin, action: 'changePin', newPin }  → เปลี่ยนรหัส
+ *   { pin, ops: [...] }                   → บันทึกข้อมูล
+ */
 function doPost(e) {
   return respond_(function () {
     const body = JSON.parse((e && e.postData && e.postData.contents) || '{}');
     checkToken_(body.token);
+    checkPin_(body.pin);
+    if (body.action === 'changePin') {
+      setPin_(body.newPin);
+      return snapshot_(undefined, true);
+    }
     const lock = LockService.getScriptLock();
     lock.waitLock(15000);
     try {
       ensureSetup_();
-      (body.ops || []).forEach(applyOp_);
+      if (body.action !== 'verify') (body.ops || []).forEach(applyOp_);
       SpreadsheetApp.flush();
     } finally {
       lock.releaseLock();
     }
-    return snapshot_();
+    return snapshot_(undefined, true);
   });
 }
 
@@ -158,12 +227,71 @@ function checkToken_(token) {
 }
 
 /* ------------------------------------------------------------------ */
+/* รหัสเจ้าหน้าที่                                                       */
+/* ------------------------------------------------------------------ */
+
+function pinSet_() {
+  return !!PropertiesService.getScriptProperties().getProperty(PIN_PROP);
+}
+
+function hashPin_(pin, salt) {
+  const bytes = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, salt + '|' + pin, Utilities.Charset.UTF_8);
+  return bytes.map(function (b) { return ('0' + (b & 0xff).toString(16)).slice(-2); }).join('');
+}
+
+function checkPin_(pin) {
+  const props = PropertiesService.getScriptProperties();
+  const hash = props.getProperty(PIN_PROP);
+  if (!hash) throw new Error('pin not set');
+  const cache = CacheService.getScriptCache();
+  const fails = Number(cache.get('pinFails')) || 0;
+  if (fails >= PIN_MAX_FAILS) throw new Error('locked');
+  if (!pin || hashPin_(String(pin), props.getProperty(SALT_PROP) || '') !== hash) {
+    cache.put('pinFails', String(fails + 1), PIN_LOCK_SECONDS);
+    throw new Error('wrong pin');
+  }
+}
+
+function setPin_(pin) {
+  const p = String(pin || '').trim();
+  if (p.length < PIN_MIN_LENGTH) throw new Error('pin too short');
+  const salt = Utilities.getUuid();
+  PropertiesService.getScriptProperties().setProperties({ STAFF_PIN_SALT: salt, STAFF_PIN_HASH: hashPin_(p, salt) });
+  CacheService.getScriptCache().remove('pinFails');
+}
+
+/** เมนูในชีต: ตั้ง / เปลี่ยนรหัสเจ้าหน้าที่ (เจ้าของชีตเท่านั้นที่เปิดเมนูนี้ได้) */
+function promptStaffPin() {
+  const ui = SpreadsheetApp.getUi();
+  const res = ui.prompt(
+    'ตั้งรหัสเจ้าหน้าที่ ICU',
+    'ใส่รหัสใหม่อย่างน้อย ' + PIN_MIN_LENGTH + ' ตัว (ตัวเลขหรือตัวอักษร) — ใช้สำหรับแก้ไขข้อมูลบนเว็บ',
+    ui.ButtonSet.OK_CANCEL);
+  if (res.getSelectedButton() !== ui.Button.OK) return;
+  try {
+    setPin_(res.getResponseText());
+    ui.alert('ตั้งรหัสเรียบร้อย ✓');
+  } catch (err) {
+    ui.alert('รหัสต้องมีอย่างน้อย ' + PIN_MIN_LENGTH + ' ตัว');
+  }
+}
+
+/** ปลดล็อกทันที (กรณีมีคนใส่รหัสผิดหลายครั้งจนถูกล็อก) */
+function unlockStaffPin() {
+  CacheService.getScriptCache().remove('pinFails');
+  SpreadsheetApp.getUi().alert('ปลดล็อกแล้ว');
+}
+
+/* ------------------------------------------------------------------ */
 /* Menu & setup                                                        */
 /* ------------------------------------------------------------------ */
 
 function onOpen() {
   SpreadsheetApp.getUi()
-    .createMenu('ICU Dashboard')
+    .createMenu('ICU Smart Center')
+    .addItem('ตั้ง / เปลี่ยนรหัสเจ้าหน้าที่', 'promptStaffPin')
+    .addItem('ปลดล็อกรหัส (ใส่ผิดหลายครั้ง)', 'unlockStaffPin')
+    .addSeparator()
     .addItem('ตั้งค่า / ซ่อมแซมแท็บ', 'setup')
     .addToUi();
 }
@@ -175,6 +303,8 @@ function setup() {
 /** กด Run ฟังก์ชันนี้ 1 ครั้งในหน้า Apps Script เพื่ออนุญาตให้สคริปต์บันทึกรูปบุคลากรลง Google Drive */
 function authorize() {
   SpreadsheetApp.getActive().getName();
+  PropertiesService.getScriptProperties().getKeys();
+  CacheService.getScriptCache().get('pinFails');
   photoFolder_();
 }
 
@@ -188,8 +318,13 @@ function ensureSetup_(force) {
     staff: !!ss.getSheetByName(TAB.staff),
     roster: !!ss.getSheetByName(TAB.roster),
     docs: !!ss.getSheetByName(TAB.docs),
+    news: !!ss.getSheetByName(TAB.news),
+    kpi: !!ss.getSheetByName(TAB.kpi),
+    kpiData: !!ss.getSheetByName(TAB.kpiData),
+    links: !!ss.getSheetByName(TAB.links),
   };
-  if (!force && existed.beds && existed.daily && existed.log && existed.stats && existed.staff && existed.roster && existed.docs) return;
+  const all = Object.keys(existed).every(function (k) { return existed[k]; });
+  if (!force && all) return;
 
   const beds = sheet_(TAB.beds, BED_HEAD);
   const daily = sheet_(TAB.daily, DAILY_HEAD);
@@ -198,6 +333,10 @@ function ensureSetup_(force) {
   const staff = sheet_(TAB.staff, STAFF_HEAD);
   const roster = sheet_(TAB.roster, ROSTER_HEAD);
   const docs = sheet_(TAB.docs, DOC_HEAD);
+  const news = sheet_(TAB.news, NEWS_HEAD);
+  const kpi = sheet_(TAB.kpi, KPI_HEAD);
+  const kpiData = sheet_(TAB.kpiData, KPI_DATA_HEAD);
+  const links = sheet_(TAB.links, LINK_HEAD);
 
   if (beds.getLastRow() < 2) {
     const now = new Date();
@@ -279,8 +418,36 @@ function ensureSetup_(force) {
   docs.setColumnWidth(5, 300);
   docs.setColumnWidth(6, 300);
 
+  news.getRange('A2:A').setNumberFormat('@');
+  news.getRange('E2:E').setNumberFormat('yyyy-mm-dd');
+  news.getRange('K2:K').setNumberFormat('yyyy-mm-dd hh:mm');
+  news.getRange('C2:C').setWrap(true);
+  news.getRange('D2:D500').setDataValidation(list(NEWS_CATEGORIES));
+  news.getRange('H2:H500').setDataValidation(list(['ใช่']));
+  news.getRange('J2:J500').setDataValidation(list([NEWS_PUBLISHED, NEWS_HIDDEN]));
+  news.setColumnWidth(2, 260);
+  news.setColumnWidth(3, 360);
+
+  kpi.getRange('A2:A').setNumberFormat('@');
+  if (kpi.getLastRow() < 2) kpi.getRange(2, 1, KPI_SEED.length, KPI_COLS.length).setValues(KPI_SEED);
+  kpi.getRange('G2:G200').setDataValidation(list(['≤', '≥']));
+  kpi.getRange('I2:I200').setDataValidation(list(KPI_SOURCES));
+  kpi.getRange('K2:K200').setDataValidation(list(KPI_SOURCES));
+  kpi.getRange('N2:N200').setDataValidation(list([DOC_ACTIVE, DOC_INACTIVE]));
+  kpi.setFrozenColumns(2);
+  kpi.setColumnWidth(2, 300);
+
+  kpiData.getRange('A2:B').setNumberFormat('@');
+  kpiData.getRange('F2:F').setNumberFormat('yyyy-mm-dd hh:mm');
+
+  links.getRange('A2:A').setNumberFormat('@');
+  links.getRange('E2:E300').setDataValidation(list(LINK_CATEGORIES));
+  links.getRange('G2:G300').setDataValidation(list([DOC_ACTIVE, DOC_INACTIVE]));
+  links.setColumnWidth(2, 240);
+  links.setColumnWidth(4, 320);
+
   const first = ss.getSheets()[0];
-  if (first && first.getName() !== TAB.beds && first.getLastRow() === 0 && ss.getSheets().length > 7) {
+  if (first && first.getName() !== TAB.beds && first.getLastRow() === 0 && ss.getSheets().length > 11) {
     ss.deleteSheet(first); // ลบ "Sheet1" ว่าง ๆ ที่ติดมากับไฟล์ใหม่
   }
 }
@@ -302,25 +469,34 @@ function sheet_(name, header) {
 /* Read                                                                */
 /* ------------------------------------------------------------------ */
 
-/** parts = 'core' → เฉพาะข้อมูลที่เปลี่ยนบ่อย (เตียง/รายวัน/Log/Stats) · อื่น ๆ → รวมบุคลากรและตารางเวร */
-function snapshot_(parts) {
+/**
+ * parts = 'core' → เฉพาะข้อมูลที่เปลี่ยนบ่อย (เตียง/รายวัน/Log/Stats) · อื่น ๆ → รวมบุคลากร ตารางเวร เอกสาร ข่าว KPI ลิงก์
+ * staff = true → ผ่านการตรวจรหัสแล้ว: แนบลิงก์ Google Sheet ไปด้วย
+ */
+function snapshot_(parts, staff) {
   const ss = SpreadsheetApp.getActive();
   const tz = ss.getSpreadsheetTimeZone();
   const beds = ss.getSheetByName(TAB.beds);
   const daily = ss.getSheetByName(TAB.daily);
   const log = ss.getSheetByName(TAB.log);
   const stats = ss.getSheetByName(TAB.stats);
-  const staff = ss.getSheetByName(TAB.staff);
+  const staffSh = ss.getSheetByName(TAB.staff);
   const roster = ss.getSheetByName(TAB.roster);
   const docs = ss.getSheetByName(TAB.docs);
+  const news = ss.getSheetByName(TAB.news);
+  const kpi = ss.getSheetByName(TAB.kpi);
+  const kpiData = ss.getSheetByName(TAB.kpiData);
+  const links = ss.getSheetByName(TAB.links);
   const out = {
-    spreadsheetId: ss.getId(),
-    spreadsheetUrl: ss.getUrl(),
+    spreadsheetId: staff ? ss.getId() : '',
+    spreadsheetUrl: staff ? ss.getUrl() : '',
     title: ss.getName(),
     timeZone: tz,
+    pinSet: pinSet_(),
     gids: {
       beds: beds.getSheetId(), daily: daily.getSheetId(), log: log.getSheetId(), stats: stats.getSheetId(),
-      staff: staff.getSheetId(), roster: roster.getSheetId(), docs: docs.getSheetId(),
+      staff: staffSh.getSheetId(), roster: roster.getSheetId(), docs: docs.getSheetId(),
+      news: news.getSheetId(), kpi: kpi.getSheetId(), kpiData: kpiData.getSheetId(), links: links.getSheetId(),
     },
     beds: readRows_(beds, BED_COLS, tz),
     daily: readRows_(daily, DAILY_COLS, tz),
@@ -329,12 +505,16 @@ function snapshot_(parts) {
     serverTime: Utilities.formatDate(new Date(), tz, "yyyy-MM-dd'T'HH:mm:ss"),
   };
   if (parts !== 'core') {
-    out.staff = readRows_(staff, STAFF_COLS, tz).map(function (r) {
+    out.staff = readRows_(staffSh, STAFF_COLS, tz).map(function (r) {
       r.active = String(r.active).trim() !== STAFF_INACTIVE;
       return r;
     });
     out.roster = readRoster_(roster, tz);
     out.docs = readRows_(docs, DOC_COLS, tz);
+    out.news = readRows_(news, NEWS_COLS, tz);
+    out.kpis = readRows_(kpi, KPI_COLS, tz);
+    out.kpiData = readRows_(kpiData, KPI_DATA_COLS, tz);
+    out.links = readRows_(links, LINK_COLS, tz);
   }
   return out;
 }
@@ -396,6 +576,11 @@ function applyOp_(op) {
   if (op.type === 'uploadPhoto') return uploadPhoto_(op.staffId, op.dataUrl);
   if (op.type === 'upsertDoc') return upsert_(TAB.docs, DOC_COLS, 'id', toDocRow_(op.doc));
   if (op.type === 'uploadDoc') return uploadDoc_(op.docId, op.name, op.dataUrl);
+  if (op.type === 'upsertNews') return upsert_(TAB.news, NEWS_COLS, 'id', toNewsRow_(op.news));
+  if (op.type === 'uploadNewsFile') return uploadNewsFile_(op.newsId, op.field, op.name, op.dataUrl);
+  if (op.type === 'upsertKpi') return upsert_(TAB.kpi, KPI_COLS, 'id', toActiveRow_(op.kpi, KPI_COLS));
+  if (op.type === 'upsertKpiData') return upsertKpiData_(op.record);
+  if (op.type === 'upsertLink') return upsert_(TAB.links, LINK_COLS, 'id', toActiveRow_(op.link, LINK_COLS));
   throw new Error('unknown op: ' + op.type);
 }
 
@@ -512,6 +697,73 @@ function uploadDoc_(docId, name, dataUrl) {
   const file = folder.createFile(Utilities.newBlob(Utilities.base64Decode(m[2]), m[1], fileName));
   file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
   upsert_(TAB.docs, DOC_COLS, 'id', { id: id, link: 'https://drive.google.com/file/d/' + file.getId() + '/view', updatedAt: nowStr_() });
+}
+
+function toNewsRow_(n) {
+  const o = {};
+  Object.keys(n).forEach(function (k) {
+    if (NEWS_COLS.indexOf(k) < 0) return;
+    let v = n[k];
+    if (k === 'pinned') v = v ? 'ใช่' : '';
+    if (k === 'status') v = v === false || v === NEWS_HIDDEN ? NEWS_HIDDEN : NEWS_PUBLISHED;
+    o[k] = v;
+  });
+  o.updatedAt = nowStr_();
+  return o;
+}
+
+/** KPI / ลิงก์: active (true/false) → ใช้งาน / ยกเลิก */
+function toActiveRow_(obj, cols) {
+  const o = {};
+  Object.keys(obj).forEach(function (k) {
+    if (cols.indexOf(k) < 0) return;
+    o[k] = k === 'active' ? (obj[k] === false || obj[k] === DOC_INACTIVE ? DOC_INACTIVE : DOC_ACTIVE) : obj[k];
+  });
+  return o;
+}
+
+/** ผล KPI รายเดือน: คีย์ = เดือน + รหัสตัวชี้วัด */
+function upsertKpiData_(rec) {
+  const ss = SpreadsheetApp.getActive();
+  const tz = ss.getSpreadsheetTimeZone();
+  const sh = ss.getSheetByName(TAB.kpiData);
+  const month = monthKey_(rec.month, tz);
+  const kpiId = String(rec.kpiId || '').trim();
+  if (!/^\d{4}-\d{2}$/.test(month) || !kpiId) throw new Error('missing month/kpiId');
+  const last = sh.getLastRow();
+  let rowNum = -1;
+  if (last >= 2) {
+    const keys = sh.getRange(2, 1, last - 1, 2).getDisplayValues();
+    for (let i = 0; i < keys.length; i++) {
+      if (monthKey_(keys[i][0], tz) === month && String(keys[i][1]).trim() === kpiId) {
+        rowNum = i + 2;
+        break;
+      }
+    }
+  }
+  if (rowNum < 0) rowNum = Math.max(last, 1) + 1;
+  const num = function (v) { return v === '' || v === null || v === undefined || isNaN(Number(v)) ? '' : Number(v); };
+  sh.getRange(rowNum, 1, 1, 2).setNumberFormat('@');
+  sh.getRange(rowNum, 1, 1, KPI_DATA_COLS.length).setValues([[
+    month, kpiId, num(rec.numerator), num(rec.denominator), rec.note || '', toCell_('updatedAt', nowStr_()),
+  ]]);
+}
+
+/** รูปภาพ / ไฟล์แนบของข่าว → Google Drive แล้วใส่ลิงก์ในแท็บ News */
+function uploadNewsFile_(newsId, field, name, dataUrl) {
+  const id = String(newsId || '').trim();
+  const m = String(dataUrl || '').match(/^data:([\w.+-]+\/[\w.+-]+);base64,(.+)$/);
+  if (!id || !m || (field !== 'image' && field !== 'attachment')) throw new Error('invalid file');
+  const folder = folderByName_(FILE_FOLDER);
+  const fileName = id + ' - ' + String(name || field).replace(/[\\/:*?"<>|]/g, ' ').slice(0, 120);
+  const file = folder.createFile(Utilities.newBlob(Utilities.base64Decode(m[2]), m[1], fileName));
+  file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+  const link = field === 'image'
+    ? 'https://lh3.googleusercontent.com/d/' + file.getId()
+    : 'https://drive.google.com/file/d/' + file.getId() + '/view';
+  const row = { id: id, updatedAt: nowStr_() };
+  row[field] = link;
+  upsert_(TAB.news, NEWS_COLS, 'id', row);
 }
 
 function folderByName_(name) {

@@ -109,7 +109,7 @@ export type DocCategory =
   | 'อุปกรณ์การแพทย์'
   | 'ระเบียบหน่วยงาน'
   | 'อื่นๆ';
-export type DocType = 'SOP' | 'แนวปฏิบัติ (CPG)' | 'ระเบียบ / ข้อบังคับ' | 'คู่มือ' | 'แบบฟอร์ม';
+export type DocType = 'SOP' | 'แนวปฏิบัติ (CPG)' | 'ระเบียบ / ข้อบังคับ' | 'คู่มือ' | 'แบบฟอร์ม' | 'เอกสารทั่วไป';
 
 /** 1 เอกสาร = 1 แถวในแท็บ Docs */
 export interface Doc {
@@ -132,11 +132,96 @@ export interface Doc {
   row?: number;
 }
 
+export type NewsCategory = 'ประกาศ' | 'ข่าวสาร' | 'กิจกรรม' | 'อบรม / ประชุม' | 'ด่วน';
+
+/** 1 ข่าว = 1 แถวในแท็บ News */
+export interface News {
+  id: string;
+  title: string;
+  body: string;
+  category: NewsCategory;
+  date: string; // yyyy-MM-dd
+  image: string;
+  attachment: string;
+  pinned: boolean;
+  author: string;
+  published: boolean;
+  updatedAt: string;
+  row?: number;
+}
+
+/** ที่มาของตัวตั้ง / ตัวหาร: กรอกเอง หรือดึงอัตโนมัติจากข้อมูลรายวัน */
+export type KpiSource =
+  | 'กรอกเอง'
+  | 'วันนอนรวม'
+  | 'วันใช้เครื่องช่วยหายใจ'
+  | 'วันใส่ C-Line'
+  | 'วันใส่ Foley'
+  | 'จำนวนรับใหม่'
+  | 'จำนวนจำหน่าย'
+  | 'จำนวนเสียชีวิต';
+
+/** นิยามตัวชี้วัดคุณภาพ 1 ตัว = 1 แถวในแท็บ KPI */
+export interface Kpi {
+  id: string;
+  name: string;
+  group: string;
+  unit: string;
+  multiplier: number;
+  target: number | null;
+  direction: '≤' | '≥';
+  numeratorLabel: string;
+  numeratorSource: KpiSource;
+  denominatorLabel: string;
+  denominatorSource: KpiSource;
+  description: string;
+  order: number;
+  active: boolean;
+  row?: number;
+}
+
+/** ผล KPI 1 ตัว ต่อ 1 เดือน = 1 แถวในแท็บ KPIData */
+export interface KpiData {
+  month: string; // yyyy-MM
+  kpiId: string;
+  numerator: number | null;
+  denominator: number | null;
+  note: string;
+  updatedAt: string;
+  row?: number;
+}
+
+export type LinkCategory = 'แบบประเมิน' | 'รายงานอุบัติการณ์' | 'ลงทะเบียน' | 'อื่นๆ';
+
+/** ลิงก์ Google Forms 1 รายการ = 1 แถวในแท็บ Links */
+export interface FormLink {
+  id: string;
+  title: string;
+  description: string;
+  url: string;
+  category: LinkCategory;
+  order: number;
+  active: boolean;
+  row?: number;
+}
+
 export interface SheetMeta {
   spreadsheetId: string;
   spreadsheetUrl: string;
   title: string;
-  gids: { beds: number; daily: number; log: number; stats?: number; staff?: number; roster?: number; docs?: number };
+  gids: {
+    beds: number;
+    daily: number;
+    log: number;
+    stats?: number;
+    staff?: number;
+    roster?: number;
+    docs?: number;
+    news?: number;
+    kpi?: number;
+    kpiData?: number;
+    links?: number;
+  };
 }
 
 export interface IcuData {
@@ -147,6 +232,10 @@ export interface IcuData {
   staff: Staff[];
   roster: RosterRow[];
   docs: Doc[];
+  news: News[];
+  kpis: Kpi[];
+  kpiData: KpiData[];
+  links: FormLink[];
 }
 
 export type SheetOp =
@@ -158,6 +247,11 @@ export type SheetOp =
   | { type: 'upsertRoster'; record: { month: string; staffId: string; name: string; days: Record<string, string> } }
   | { type: 'uploadPhoto'; staffId: string; dataUrl: string }
   | { type: 'upsertDoc'; doc: Partial<Omit<Doc, 'row' | 'active' | 'updatedAt'>> & { id: string; status?: 'ใช้งาน' | 'ยกเลิก' } }
-  | { type: 'uploadDoc'; docId: string; name: string; dataUrl: string };
+  | { type: 'uploadDoc'; docId: string; name: string; dataUrl: string }
+  | { type: 'upsertNews'; news: Partial<Omit<News, 'row' | 'published' | 'updatedAt'>> & { id: string; status?: 'เผยแพร่' | 'ซ่อน' } }
+  | { type: 'uploadNewsFile'; newsId: string; field: 'image' | 'attachment'; name: string; dataUrl: string }
+  | { type: 'upsertKpi'; kpi: Partial<Omit<Kpi, 'row' | 'target'>> & { id: string; target?: number | '' } }
+  | { type: 'upsertKpiData'; record: { month: string; kpiId: string; numerator: number | ''; denominator: number | ''; note: string } }
+  | { type: 'upsertLink'; link: Partial<Omit<FormLink, 'row'>> & { id: string } };
 
 export type SyncState = 'local' | 'connecting' | 'live' | 'saving' | 'offline' | 'error';

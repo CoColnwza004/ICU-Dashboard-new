@@ -24,7 +24,7 @@ export function Stats({
   onPdf: (ym: string) => void;
   pdfBusy: boolean;
 }) {
-  const { data, meta, commit } = useStore();
+  const { data, meta, commit, isStaff } = useStore();
   const months = useMemo(() => {
     const set = new Set(availableMonths(data));
     data.stats.forEach((s) => set.add(s.month));
@@ -70,7 +70,7 @@ export function Stats({
             <h1 className="display text-[34px] sm:text-[48px]">{fmtMonth(ym)}</h1>
             <p className="mt-2 text-[15px] text-ink-2">
               {saved ? 'บันทึกแล้วในแท็บ Stats' : 'ยังไม่บันทึก — ค่าด้านล่างคำนวณจากข้อมูลในระบบ'}
-              {saved?.row && meta && (
+              {saved?.row && meta?.spreadsheetUrl && (
                 <>
                   {' · '}
                   <a className="link" href={sheetLink(meta, 'stats', saved.row) ?? '#'} target="_blank" rel="noreferrer">
@@ -109,8 +109,8 @@ export function Stats({
         {/* Input form */}
         <div className="card p-6 sm:p-7">
           <p className="eyebrow">ข้อมูลที่ใช้คำนวณ</p>
-          <h2 className="display mt-1 mb-5 text-[22px]">กรอกข้อมูล</h2>
-          <div className="space-y-3">
+          <h2 className="display mt-1 mb-5 text-[22px]">{isStaff ? 'กรอกข้อมูล' : 'ข้อมูลเดือนนี้'}</h2>
+          <fieldset disabled={!isStaff} className="space-y-3">
             {FIELDS.map((f) => (
               <label key={f.key} className="well block p-3.5">
                 <span className="flex items-center justify-between gap-2">
@@ -118,7 +118,7 @@ export function Stats({
                     <span className="text-ink-3">{f.icon}</span>
                     {f.label}
                   </span>
-                  {draft[f.key] !== auto[f.key] && (
+                  {isStaff && draft[f.key] !== auto[f.key] && (
                     <button
                       type="button"
                       className="link text-[12px]"
@@ -151,8 +151,8 @@ export function Stats({
                 setNote(e.target.value);
               }}
             />
-          </div>
-          <div className="mt-5 flex flex-wrap gap-2">
+          </fieldset>
+          {isStaff && <div className="mt-5 flex flex-wrap gap-2">
             <Button variant="primary" onClick={save}>
               บันทึกลงชีต
             </Button>
@@ -168,7 +168,7 @@ export function Stats({
                 คำนวณจากระบบทั้งหมด
               </Button>
             )}
-          </div>
+          </div>}
           <p className="mt-4 text-[12px] leading-relaxed text-ink-3">
             ค่าจากระบบ: วันนอนรวมจากแท็บ Daily, ผู้ป่วยจำหน่ายจาก Refer + เสียชีวิต (Daily) และจำหน่ายกลับบ้าน (Log) ·
             แก้ตัวเลขเองได้ก่อนบันทึก
@@ -213,7 +213,7 @@ export function Stats({
             <p className="eyebrow">แท็บ Stats</p>
             <h3 className="display mt-1 text-[22px]">สถิติที่บันทึกไว้</h3>
           </div>
-          {meta && (
+          {meta?.spreadsheetUrl && (
             <a className="link inline-flex items-center gap-0.5 text-[14px]" href={sheetLink(meta, 'stats') ?? '#'} target="_blank" rel="noreferrer">
               เปิดแท็บ Stats <ArrowUpRight className="size-3.5" />
             </a>
@@ -263,7 +263,7 @@ export function Stats({
                         </td>
                       ))}
                       <td className="pr-6 text-right sm:pr-8">
-                        {meta && r.row && (
+                        {meta?.spreadsheetUrl && r.row && (
                           <a
                             href={sheetLink(meta, 'stats', r.row) ?? '#'}
                             target="_blank"

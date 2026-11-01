@@ -13,8 +13,9 @@ export function BedCard({
 }: {
   bed: Bed;
   sheetHref: string | null;
-  onOpen: () => void;
-  onMarkReady: () => void;
+  /** ไม่ส่งมา = ดูอย่างเดียว (ผู้เข้าชมทั่วไป) */
+  onOpen?: () => void;
+  onMarkReady?: () => void;
 }) {
   const status = STATUS_META[bed.status];
   const occupied = bed.status === 'occupied';
@@ -41,12 +42,14 @@ export function BedCard({
         className="pointer-events-none absolute -top-16 -right-12 -z-10 size-48 rounded-full opacity-[0.22] blur-2xl transition-opacity duration-500 group-hover:opacity-35"
         style={{ background: `radial-gradient(circle, ${halo} 0%, transparent 70%)` }}
       />
-      <button
-        type="button"
-        onClick={onOpen}
-        aria-label={occupied ? `แก้ไขข้อมูลเตียง ${bed.bedNumber}` : `รับผู้ป่วยเข้าเตียง ${bed.bedNumber}`}
-        className="absolute inset-0 rounded-[var(--radius-card)]"
-      />
+      {onOpen && (
+        <button
+          type="button"
+          onClick={onOpen}
+          aria-label={occupied ? `แก้ไขข้อมูลเตียง ${bed.bedNumber}` : `รับผู้ป่วยเข้าเตียง ${bed.bedNumber}`}
+          className="absolute inset-0 rounded-[var(--radius-card)]"
+        />
+      )}
 
       <header className="pointer-events-none relative flex items-start justify-between gap-2">
         <div>
@@ -114,12 +117,12 @@ export function BedCard({
               ? 'พร้อมรับผู้ป่วยใหม่'
               : `รอทำความสะอาด${bed.updatedAt ? ` · ตั้งแต่ ${fmtDateTime(bed.updatedAt)}` : ''}`}
           </p>
-          {bed.status === 'available' ? (
+          {!onOpen ? null : bed.status === 'available' ? (
             <span className="btn-ink pointer-events-none mt-3 inline-flex h-9 w-fit items-center rounded-full px-4 text-[13px] font-medium transition-opacity group-hover:opacity-90">
               รับผู้ป่วย
             </span>
           ) : (
-            <button
+            onMarkReady && <button
               type="button"
               onClick={onMarkReady}
               className="pointer-events-auto relative mt-3 inline-flex h-10 w-fit items-center gap-1.5 rounded-full bg-good px-4 text-[13px] font-medium text-white shadow-[inset_0_1px_0_rgb(255_255_255/0.3),0_6px_16px_-8px_rgb(12_163_12/0.7)] transition-[filter,transform] hover:brightness-105 active:scale-[0.97]"

@@ -1,4 +1,4 @@
-import { Activity, BookOpen, CalendarClock, CalendarDays, Gauge, LayoutGrid, Maximize, Settings2, Sheet as SheetIcon, Users } from 'lucide-react';
+import { Activity, CalendarClock, CalendarDays, Gauge, House, LayoutGrid, LockKeyhole, Maximize, Newspaper, Sheet as SheetIcon, ShieldCheck, Grip, Network } from 'lucide-react';
 import { enterFullscreen } from './WallView';
 import { HOSPITAL } from '../lib/constants';
 import { relativeTime } from '../lib/date';
@@ -9,11 +9,12 @@ import { cx, Dot, IconButton, Segmented } from './ui';
 
 export const APP_NAME = 'ICU Smart Center';
 
-const SECTIONS: { value: Section; label: string; icon: typeof Activity; view: View }[] = [
+const SECTIONS: { value: Section; label: string; icon: typeof Activity; view: View; wide?: boolean }[] = [
+  { value: 'home', label: 'หน้าแรก', icon: House, view: 'home' },
   { value: 'dashboard', label: 'แดชบอร์ด', icon: LayoutGrid, view: 'overview' },
-  { value: 'roster', label: 'ตารางเวร', icon: CalendarClock, view: 'roster' },
-  { value: 'staff', label: 'บุคลากร', icon: Users, view: 'staff' },
-  { value: 'docs', label: 'คู่มือ', icon: BookOpen, view: 'docs' },
+  { value: 'news', label: 'ข่าวสาร', icon: Newspaper, view: 'news' },
+  { value: 'roster', label: 'ตารางเวร', icon: CalendarClock, view: 'roster', wide: true },
+  { value: 'staff', label: 'ผังบริหาร', icon: Network, view: 'staff', wide: true },
 ];
 
 /** เมนูย่อยของแดชบอร์ด */
@@ -32,7 +33,7 @@ export function DashboardNav({ view, onView }: { view: View; onView: (v: View) =
   );
 }
 
-export function SyncBadge({ onClick, compact }: { onClick: () => void; compact?: boolean }) {
+export function SyncBadge({ onClick, compact }: { onClick?: () => void; compact?: boolean }) {
   const { state, lastSync, error } = useStore();
   const now = useNow(1000);
   const map = {
@@ -43,31 +44,60 @@ export function SyncBadge({ onClick, compact }: { onClick: () => void; compact?:
     offline: { dot: 'bg-warn', text: 'ออฟไลน์ · ใช้ข้อมูลล่าสุด', pulse: false },
     error: { dot: 'bg-critical', text: 'เชื่อมต่อชีตไม่ได้', pulse: false },
   }[state];
+  const Tag = onClick ? 'button' : 'span';
   return (
-    <button
-      type="button"
-      onClick={onClick}
+    <Tag
+      {...(onClick ? { type: 'button' as const, onClick } : { role: 'status' })}
       title={error ?? map.text}
       aria-label={map.text}
-      className="inline-flex h-9 items-center gap-2 rounded-full px-3 text-[12px] text-ink-2 transition-colors hover:bg-fill-soft hover:text-ink"
+      className={cx(
+        'inline-flex h-9 items-center gap-2 rounded-full px-3 text-[12px] text-ink-2 transition-colors',
+        onClick && 'hover:bg-fill-soft hover:text-ink',
+      )}
     >
       <span className="relative inline-flex">
         <Dot className={cx(map.dot, map.pulse && 'animate-pulse-soft')} />
         {state === 'live' && <span className="absolute inset-0 animate-ping rounded-full bg-good/40 [animation-duration:2.4s]" />}
       </span>
       {!compact && <span className="max-w-[34vw] truncate">{map.text}</span>}
-    </button>
+    </Tag>
   );
 }
 
-export function TopBar({ view, onView, onSettings }: { view: View; onView: (v: View) => void; onSettings: () => void }) {
-  const { meta } = useStore();
-  const link = sheetLink(meta);
+export function TopBar({
+  view,
+  onView,
+  onSettings,
+  onMenu,
+}: {
+  view: View;
+  onView: (v: View) => void;
+  onSettings?: () => void;
+  onMenu: () => void;
+}) {
+  const { meta, isStaff } = useStore();
+  const link = isStaff ? sheetLink(meta) : null;
+  const section = sectionOf(view);
+  const staffBtn = (
+    <button
+      type="button"
+      onClick={() => onView('admin')}
+      aria-label={isStaff ? 'เจ้าหน้าที่ ICU (เข้าสู่ระบบแล้ว)' : 'เข้าสู่ระบบเจ้าหน้าที่'}
+      title={isStaff ? 'เจ้าหน้าที่ ICU' : 'เข้าสู่ระบบเจ้าหน้าที่'}
+      className={cx(
+        'inline-flex h-9 items-center gap-1.5 rounded-full px-2.5 text-[13px] font-medium transition-colors',
+        isStaff ? 'bg-good/14 text-good hover:bg-good/20' : 'text-ink-2 hover:bg-fill-soft hover:text-ink',
+      )}
+    >
+      {isStaff ? <ShieldCheck className="size-[18px]" strokeWidth={1.8} /> : <LockKeyhole className="size-[18px]" strokeWidth={1.6} />}
+      <span className="hidden lg:inline">{isStaff ? 'เจ้าหน้าที่' : 'เจ้าหน้าที่'}</span>
+    </button>
+  );
   return (
     <>
       <header className="sticky top-0 z-40 px-3 pt-3 sm:px-6">
         <div className="glass glass-strong mx-auto flex h-[58px] max-w-[1120px] items-center justify-between gap-3 rounded-full pr-2 pl-2.5">
-          <button type="button" onClick={() => onView('overview')} className="flex min-w-0 items-center gap-2.5 rounded-full pr-2">
+          <button type="button" onClick={() => onView('home')} className="flex min-w-0 items-center gap-2.5 rounded-full pr-2">
             <span className="btn-ink inline-flex size-9 shrink-0 items-center justify-center rounded-full">
               <svg viewBox="0 0 32 32" className="size-5" aria-hidden>
                 <path d="M5 17h5l2.5-6 4 11 2.5-5H27" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
@@ -79,20 +109,20 @@ export function TopBar({ view, onView, onSettings }: { view: View; onView: (v: V
             </span>
           </button>
 
-          <div className="hidden md:block">
+          <div className="hidden md:block lg:hidden">
             <Segmented
-              options={SECTIONS}
-              value={sectionOf(view)}
+              options={SECTIONS.filter((x) => !x.wide)}
+              value={section}
               onChange={(s) => onView(SECTIONS.find((x) => x.value === s)!.view)}
               label="เมนูหลัก"
             />
           </div>
+          <div className="hidden lg:block">
+            <Segmented options={SECTIONS} value={section} onChange={(s) => onView(SECTIONS.find((x) => x.value === s)!.view)} label="เมนูหลัก" />
+          </div>
 
           <div className="flex items-center gap-0.5">
             <div className="hidden sm:block">
-              <SyncBadge onClick={onSettings} />
-            </div>
-            <div className="sm:hidden">
               <SyncBadge onClick={onSettings} compact />
             </div>
             {link && (
@@ -102,13 +132,14 @@ export function TopBar({ view, onView, onSettings }: { view: View; onView: (v: V
                 rel="noreferrer"
                 aria-label="เปิด Google Sheet"
                 title="เปิด Google Sheet"
-                className="inline-flex size-9 items-center justify-center rounded-full text-ink-2 transition-colors hover:bg-fill-soft hover:text-ink"
+                className="hidden size-9 items-center justify-center rounded-full text-ink-2 transition-colors hover:bg-fill-soft hover:text-ink sm:inline-flex"
               >
                 <SheetIcon className="size-[18px]" strokeWidth={1.6} />
               </a>
             )}
             <IconButton
               label="โหมดเต็มจอ (จอแสดงผล)"
+              className="hidden sm:inline-flex"
               onClick={() => {
                 void enterFullscreen();
                 onView('wall');
@@ -116,9 +147,10 @@ export function TopBar({ view, onView, onSettings }: { view: View; onView: (v: V
             >
               <Maximize className="size-[18px]" strokeWidth={1.6} />
             </IconButton>
-            <IconButton label="เชื่อมต่อ Google Sheet / ตั้งค่า" onClick={onSettings}>
-              <Settings2 className="size-[18px]" strokeWidth={1.6} />
+            <IconButton label="เมนูทั้งหมด" onClick={onMenu} className={cx(section === 'more' && 'bg-fill-soft text-ink')}>
+              <Grip className="size-[18px]" strokeWidth={1.8} />
             </IconButton>
+            {staffBtn}
           </div>
         </div>
       </header>
@@ -126,23 +158,25 @@ export function TopBar({ view, onView, onSettings }: { view: View; onView: (v: V
       {/* แถบแท็บลอยด้านล่างสำหรับมือถือ (แบบ iOS) */}
       <nav
         aria-label="เมนูหลัก"
-        className="glass glass-strong fixed inset-x-0 bottom-[max(12px,env(safe-area-inset-bottom))] z-40 mx-auto flex w-[min(420px,calc(100%-24px))] items-center justify-between rounded-full p-1.5 md:hidden"
+        className="glass glass-strong fixed inset-x-0 bottom-[max(12px,env(safe-area-inset-bottom))] z-40 mx-auto flex w-[min(440px,calc(100%-24px))] items-center justify-between rounded-full p-1.5 md:hidden"
       >
-        {SECTIONS.map((t) => {
+        {[
+          ...SECTIONS.slice(0, 4).map((t) => ({ key: t.value, label: t.label, icon: t.icon, active: t.value === section, on: () => onView(t.view) })),
+          { key: 'more', label: 'เมนู', icon: Grip, active: section === 'more', on: onMenu },
+        ].map((t) => {
           const Icon = t.icon;
-          const active = t.value === sectionOf(view);
           return (
             <button
-              key={t.value}
+              key={t.key}
               type="button"
-              aria-current={active ? 'page' : undefined}
-              onClick={() => onView(t.view)}
+              aria-current={t.active ? 'page' : undefined}
+              onClick={t.on}
               className={cx(
                 'flex h-[52px] min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-full text-[11px] font-medium whitespace-nowrap transition-all duration-300 ease-[var(--ease-liquid)]',
-                active ? 'seg-thumb text-accent' : 'text-ink-2 active:scale-95',
+                t.active ? 'seg-thumb text-accent' : 'text-ink-2 active:scale-95',
               )}
             >
-              <Icon className="size-5" strokeWidth={active ? 2 : 1.6} />
+              <Icon className="size-5" strokeWidth={t.active ? 2 : 1.6} />
               {t.label}
             </button>
           );

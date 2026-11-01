@@ -14,6 +14,29 @@ export interface Snapshot extends SheetMeta {
   staff?: Record<string, unknown>[];
   roster?: Record<string, unknown>[];
   docs?: Record<string, unknown>[];
+  news?: Record<string, unknown>[];
+  kpis?: Record<string, unknown>[];
+  kpiData?: Record<string, unknown>[];
+  links?: Record<string, unknown>[];
+  /** สคริปต์เวอร์ชันที่มีรหัสเจ้าหน้าที่: ตั้งรหัสแล้วหรือยัง (undefined = สคริปต์เวอร์ชันเก่า) */
+  pinSet?: boolean;
+}
+
+const ERRORS: Record<string, string> = {
+  unauthorized: 'รหัสลับ (token) ไม่ถูกต้อง',
+  'wrong pin': 'รหัสเจ้าหน้าที่ไม่ถูกต้อง',
+  locked: 'ใส่รหัสผิดหลายครั้ง ระบบล็อกไว้ 10 นาที',
+  'pin not set': 'ยังไม่ได้ตั้งรหัสเจ้าหน้าที่ — ตั้งได้ที่ชีต เมนู ICU Smart Center › ตั้ง / เปลี่ยนรหัสเจ้าหน้าที่',
+  'pin too short': 'รหัสต้องมีอย่างน้อย 6 ตัว',
+};
+
+/** ข้อผิดพลาดจากสคริปต์ · code = ข้อความดั้งเดิม (เช่น 'wrong pin') */
+export class ApiError extends Error {
+  code: string;
+  constructor(code: string) {
+    super(ERRORS[code] ?? code);
+    this.code = code;
+  }
 }
 
 const isAppsScriptUrl = (url: string) => /^https:\/\/script\.google(usercontent)?\.com\//.test(url.trim());
@@ -36,9 +59,7 @@ async function readJson(res: Response): Promise<Snapshot> {
   } catch {
     throw new Error('อ่านข้อมูลไม่ได้ — ตรวจสอบว่า Deploy แบบ "Who has access: Anyone"');
   }
-  if (!body.ok) {
-    throw new Error(body.error === 'unauthorized' ? 'รหัสลับ (token) ไม่ถูกต้อง' : body.error || 'เกิดข้อผิดพลาด');
-  }
+  if (!body.ok) throw new ApiError(body.error || 'เกิดข้อผิดพลาด');
   return body;
 }
 
@@ -52,16 +73,24 @@ export async function fetchSnapshot(cfg: SheetConfig, parts?: 'core', signal?: A
 }
 
 /** text/plain = "simple request" ไม่มี CORS preflight (Apps Script ไม่รองรับ OPTIONS) */
-export async function postOps(cfg: SheetConfig, ops: SheetOp[]): Promise<Snapshot> {
+async function post(cfg: SheetConfig, body: Record<string, unknown>): Promise<Snapshot> {
   return readJson(
     await fetch(cfg.url.trim(), {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({ token: cfg.token || undefined, ops }),
+      body: JSON.stringify({ token: cfg.token || undefined, ...body }),
       redirect: 'follow',
     }),
   );
 }
+
+/** บันทึกข้อมูล (ต้องมีรหัสเจ้าหน้าที่) */
+export const postOps = (cfg: SheetConfig, pin: string, ops: SheetOp[]) => post(cfg, { pin, ops });
+
+/** ตรวจรหัสเจ้าหน้าที่ → ได้ข้อมูลทั้งหมดพร้อมลิงก์ชีต */
+export const verifyPin = (cfg: SheetConfig, pin: string) => post(cfg, { pin, action: 'verify' });
+
+export const changePin = (cfg: SheetConfig, pin: string, newPin: string) => post(cfg, { pin, action: 'changePin', newPin });
 
 export const sheetLink = (meta: SheetMeta | null, tab?: keyof SheetMeta['gids'], row?: number) => {
   if (!meta?.spreadsheetUrl) return null;

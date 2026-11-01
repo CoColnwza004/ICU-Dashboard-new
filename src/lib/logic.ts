@@ -17,6 +17,7 @@ import type {
 } from '../types';
 import { ACUITIES, DEFAULT_BEDS, DEVICES, EVENT_META, INDICATORS } from './constants';
 import { demoDocs, docOp, normalizeDoc, sortDocs } from './docs';
+import { demoKpis, demoLinks, demoNews, normalizeKpi, normalizeKpiData, normalizeLink, normalizeNews, sortKpis, sortLinks, sortNews } from './content';
 import { normalizeDateKey, parseLocalDateTime, shiftDate, toLocalDateTime, todayKey } from './date';
 
 /* ------------------------------------------------------------------ */
@@ -61,6 +62,10 @@ export const initialData = (): IcuData => ({
   staff: [],
   roster: [],
   docs: [],
+  news: [],
+  kpis: [],
+  kpiData: [],
+  links: [],
 });
 
 /** ข้อมูลเก่าในเบราว์เซอร์ (ก่อนมีแท็บ Stats / 8 เตียง) → รูปแบบปัจจุบัน */
@@ -70,7 +75,11 @@ export const upgradeLocalData = (d: Partial<IcuData>): IcuData => {
     if (!beds.some((b) => b.bedNumber === n)) beds.push(emptyBed(n));
   });
   beds.sort((a, b) => a.bedNumber.localeCompare(b.bedNumber));
-  return { beds, daily: d.daily ?? [], logs: d.logs ?? [], stats: d.stats ?? [], staff: d.staff ?? [], roster: d.roster ?? [], docs: d.docs ?? [] };
+  return {
+    ...initialData(),
+    ...d,
+    beds,
+  };
 };
 
 /* ------------------------------------------------------------------ */
@@ -225,7 +234,15 @@ export const normalizeData = (raw: {
   staff?: Raw[];
   roster?: Raw[];
   docs?: Raw[];
+  news?: Raw[];
+  kpis?: Raw[];
+  kpiData?: Raw[];
+  links?: Raw[];
 }): IcuData => ({
+  news: (raw.news ?? []).map(normalizeNews).filter((n) => n.id && n.title).sort(sortNews),
+  kpis: (raw.kpis ?? []).map(normalizeKpi).filter((k) => k.id && k.name).sort(sortKpis),
+  kpiData: (raw.kpiData ?? []).map(normalizeKpiData).filter((x) => /^\d{4}-\d{2}$/.test(x.month) && x.kpiId),
+  links: (raw.links ?? []).map(normalizeLink).filter((l) => l.id && l.title).sort(sortLinks),
   docs: (raw.docs ?? []).map(normalizeDoc).filter((d) => d.id && d.title).sort(sortDocs),
   staff: (raw.staff ?? []).map(normalizeStaff).filter((x) => x.id && x.name).sort(byOrder),
   roster: (raw.roster ?? []).map(normalizeRoster).filter((x) => /^\d{4}-\d{2}$/.test(x.month) && (x.staffId || x.name)),
@@ -424,6 +441,25 @@ export const pushAllOps = (data: IcuData): SheetOp[] => [
     ];
   }),
   ...(data.docs ?? []).map(docOp),
+  ...(data.news ?? []).map((n) => {
+    const { row: _row, published, updatedAt: _u, ...news } = n;
+    return { type: 'upsertNews', news: { ...news, status: published ? 'เผยแพร่' : 'ซ่อน' } } as SheetOp;
+  }),
+  ...(data.kpis ?? []).map((k) => {
+    const { row: _row, target, ...kpi } = k;
+    return { type: 'upsertKpi', kpi: { ...kpi, target: target ?? '' } } as SheetOp;
+  }),
+  ...(data.kpiData ?? []).map(
+    (x) =>
+      ({
+        type: 'upsertKpiData',
+        record: { month: x.month, kpiId: x.kpiId, numerator: x.numerator ?? '', denominator: x.denominator ?? '', note: x.note },
+      }) as SheetOp,
+  ),
+  ...(data.links ?? []).map((l) => {
+    const { row: _row, ...link } = l;
+    return { type: 'upsertLink', link } as SheetOp;
+  }),
   ...(data.roster ?? []).map(
     (r) =>
       ({
@@ -634,7 +670,7 @@ export const demoData = (): IcuData => {
     { timestamp: ago(1.4), event: 'admit', bedNumber: 'ICU-02', caseCode: 'CASE-2414', acuity: 'High', admittedAt: ago(1.4), note: '' },
     { timestamp: ago(0.3), event: 'ward', bedNumber: 'ICU-03', caseCode: 'CASE-2408', acuity: 'Moderate', admittedAt: ago(4.5), note: 'ย้ายอายุรกรรมชาย' },
   ];
-  return { beds, daily, logs, stats: [], ...demoTeam(), docs: demoDocs() };
+  return { beds, daily, logs, stats: [], ...demoTeam(), docs: demoDocs(), news: demoNews(), ...demoKpis(), links: demoLinks() };
 };
 
 /** ทีมตัวอย่าง (ชื่อสมมติ ไม่มีรูป) + ตารางเวรเดือนนี้ — ใช้เฉพาะโหมดทดลองในเครื่อง */

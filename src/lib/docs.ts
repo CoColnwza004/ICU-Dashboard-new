@@ -11,7 +11,8 @@ export const DOC_CATEGORIES: DocCategory[] = [
   'ระเบียบหน่วยงาน',
   'อื่นๆ',
 ];
-export const DOC_TYPES: DocType[] = ['SOP', 'แนวปฏิบัติ (CPG)', 'ระเบียบ / ข้อบังคับ', 'คู่มือ', 'แบบฟอร์ม'];
+export const DOC_TYPES: DocType[] = ['SOP', 'แนวปฏิบัติ (CPG)', 'ระเบียบ / ข้อบังคับ', 'คู่มือ', 'แบบฟอร์ม', 'เอกสารทั่วไป'];
+export const CPG: DocType = 'แนวปฏิบัติ (CPG)';
 
 /** แจ้งเตือนก่อนครบกำหนดทบทวนกี่วัน */
 export const REVIEW_SOON_DAYS = 30;

@@ -38,13 +38,20 @@ const useTodayDuty = () => {
   }, [data]);
 };
 
-export function StaffPage() {
-  const { data, meta } = useStore();
+export function StaffPage({ startNew, onStarted }: { startNew?: boolean; onStarted?: () => void }) {
+  const { data, meta, isStaff } = useStore();
   const [mode, setMode] = useState<Mode>('org');
   const [q, setQ] = useState('');
   const [group, setGroup] = useState<'all' | StaffGroup>('all');
   const [editing, setEditing] = useState<Staff | 'new' | null>(null);
   const duty = useTodayDuty();
+  const open = isStaff ? setEditing : undefined;
+
+  useEffect(() => {
+    if (!startNew) return;
+    if (isStaff) setEditing('new');
+    onStarted?.();
+  }, [startNew, isStaff, onStarted]);
 
   const active = data.staff.filter((s) => s.active);
   const counts = STAFF_GROUPS.map((g) => ({ g, n: active.filter((s) => s.group === g).length })).filter((x) => x.n > 0);
@@ -53,7 +60,7 @@ export function StaffPage() {
       (group === 'all' || s.group === group) &&
       (!q || `${s.name} ${s.nickname} ${s.position} ${s.skills.join(' ')}`.toLowerCase().includes(q.toLowerCase())),
   );
-  const inactive = data.staff.filter((s) => !s.active);
+  const inactive = isStaff ? data.staff.filter((s) => !s.active) : [];
 
   return (
     <div className="space-y-10 pt-6 sm:space-y-12 sm:pt-12">
@@ -61,7 +68,7 @@ export function StaffPage() {
         <p className="eyebrow">บุคลากร</p>
         <div className="mt-3 flex flex-wrap items-end justify-between gap-6">
           <div>
-            <h1 className="display text-[34px] sm:text-[48px]">ทีม ICU</h1>
+            <h1 className="display text-[34px] sm:text-[48px]">{mode === 'org' ? 'ผังบริหารงาน ICU' : 'ทีม ICU'}</h1>
             <p className="mt-2 text-[15px] text-ink-2">
               {active.length} คน
               {counts.map((c) => ` · ${c.g} ${c.n}`).join('')}
@@ -91,10 +98,12 @@ export function StaffPage() {
                 },
               ]}
             />
-            <Button variant="primary" onClick={() => setEditing('new')}>
-              <UserPlus className="size-4" strokeWidth={1.8} />
-              เพิ่มบุคลากร
-            </Button>
+            {isStaff && (
+              <Button variant="primary" onClick={() => setEditing('new')}>
+                <UserPlus className="size-4" strokeWidth={1.8} />
+                เพิ่มบุคลากร
+              </Button>
+            )}
           </div>
         </div>
       </section>
@@ -102,8 +111,8 @@ export function StaffPage() {
       {active.length === 0 ? (
         <div className="card">
           <Empty title="ยังไม่มีรายชื่อบุคลากร">
-            กด “เพิ่มบุคลากร” หรือกรอกในแท็บ Staff ของ Google Sheet
-            {meta && (
+            {isStaff ? 'กด “เพิ่มบุคลากร” หรือกรอกในแท็บ Staff ของ Google Sheet' : 'เจ้าหน้าที่จะเพิ่มรายชื่อบุคลากรที่นี่'}
+            {meta?.spreadsheetUrl && (
               <>
                 {' · '}
                 <a className="link" href={sheetLink(meta, 'staff') ?? '#'} target="_blank" rel="noreferrer">
@@ -115,10 +124,10 @@ export function StaffPage() {
         </div>
       ) : mode === 'org' ? (
         <section className="card overflow-x-auto p-6 sm:p-8">
-          <OrgChart staff={active} duty={duty} onOpen={setEditing} />
-          <p className="mt-6 text-[12px] text-ink-3">
-            ผังสร้างจากช่อง “หัวหน้า (รหัส)” ของแต่ละคน · แตะที่ชื่อเพื่อแก้ไข
-          </p>
+          <OrgChart staff={active} duty={duty} onOpen={open} />
+          {isStaff && (
+            <p className="mt-6 text-[12px] text-ink-3">ผังสร้างจากช่อง “หัวหน้า (รหัส)” ของแต่ละคน · แตะที่ชื่อเพื่อแก้ไข</p>
+          )}
         </section>
       ) : (
         <section className="space-y-5">
@@ -142,7 +151,7 @@ export function StaffPage() {
           ) : (
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
               {list.map((s) => (
-                <PersonCard key={s.id} s={s} duty={duty.get(s.id)} onOpen={() => setEditing(s)} />
+                <PersonCard key={s.id} s={s} duty={duty.get(s.id)} onOpen={open && (() => open(s))} />
               ))}
             </div>
           )}
@@ -157,7 +166,7 @@ export function StaffPage() {
               <button
                 key={s.id}
                 type="button"
-                onClick={() => setEditing(s)}
+                onClick={() => open?.(s)}
                 className="btn-glass inline-flex items-center gap-2 rounded-full py-1 pr-3.5 pl-1 text-[13px] text-ink-2 opacity-70 hover:opacity-100"
               >
                 <Avatar staff={s} size={26} />
@@ -173,12 +182,15 @@ export function StaffPage() {
   );
 }
 
-function PersonCard({ s, duty, onOpen }: { s: Staff; duty?: string; onOpen: () => void }) {
+function PersonCard({ s, duty, onOpen }: { s: Staff; duty?: string; onOpen?: () => void }) {
+  const Tag = onOpen ? 'button' : 'div';
   return (
-    <button
-      type="button"
-      onClick={onOpen}
-      className="card group flex flex-col items-center p-5 text-center transition-transform duration-500 ease-[var(--ease-liquid)] hover:-translate-y-1"
+    <Tag
+      {...(onOpen ? { type: 'button' as const, onClick: onOpen } : {})}
+      className={cx(
+        'card group flex flex-col items-center p-5 text-center',
+        onOpen && 'transition-transform duration-500 ease-[var(--ease-liquid)] hover:-translate-y-1',
+      )}
     >
       <Avatar staff={s} size={96} className="shadow-[0_8px_24px_-12px_rgb(20_30_60/0.45)]" />
       <p className="mt-4 w-full truncate text-[15px] font-semibold">{s.name}</p>
@@ -200,7 +212,7 @@ function PersonCard({ s, duty, onOpen }: { s: Staff; duty?: string; onOpen: () =
           วันนี้: <span className="font-medium text-ink-2">{duty}</span>
         </p>
       )}
-    </button>
+    </Tag>
   );
 }
 
@@ -208,7 +220,7 @@ function PersonCard({ s, duty, onOpen }: { s: Staff; duty?: string; onOpen: () =
 /* ผังองค์กร: กล่องซ้อนกันตามสายบังคับบัญชา (ใช้ได้ทั้งจอใหญ่และมือถือ) */
 /* ------------------------------------------------------------------ */
 
-function OrgChart({ staff, duty, onOpen }: { staff: Staff[]; duty: Map<string, string>; onOpen: (s: Staff) => void }) {
+function OrgChart({ staff, duty, onOpen }: { staff: Staff[]; duty: Map<string, string>; onOpen?: (s: Staff) => void }) {
   const ids = new Set(staff.map((s) => s.id));
   const children = new Map<string, Staff[]>();
   const roots: Staff[] = [];
@@ -227,7 +239,7 @@ function OrgChart({ staff, duty, onOpen }: { staff: Staff[]; duty: Map<string, s
     const branches = kids.filter(hasKids);
     return (
       <div key={s.id} className="flex flex-col items-center">
-        <OrgCard s={s} duty={duty.get(s.id)} onOpen={() => onOpen(s)} big={depth === 0} />
+        <OrgCard s={s} duty={duty.get(s.id)} onOpen={onOpen && (() => onOpen(s))} big={depth === 0} />
         {kids.length > 0 && (
           <>
             <span className="h-6 w-px bg-line-strong" aria-hidden />
@@ -252,28 +264,31 @@ function OrgChart({ staff, duty, onOpen }: { staff: Staff[]; duty: Map<string, s
   );
 }
 
-function OrgCard({ s, duty, onOpen, big }: { s: Staff; duty?: string; onOpen: () => void; big?: boolean }) {
+/** การ์ดในผังบริหารงาน: ชื่อ-สกุลจริงเป็นหัวเรื่อง (ชื่อเล่นเป็นรอง) */
+function OrgCard({ s, duty, onOpen, big }: { s: Staff; duty?: string; onOpen?: () => void; big?: boolean }) {
+  const Tag = onOpen ? 'button' : 'div';
   return (
-    <button
-      type="button"
-      onClick={onOpen}
+    <Tag
+      {...(onOpen ? { type: 'button' as const, onClick: onOpen } : {})}
       className={cx(
-        'glass glass-strong flex flex-col items-center rounded-[20px] text-center transition-transform duration-300 hover:-translate-y-0.5',
-        big ? 'w-[180px] p-4' : 'w-[100px] p-2.5 sm:w-[132px] sm:p-3',
+        'glass glass-strong flex flex-col items-center rounded-[22px] text-center',
+        onOpen && 'transition-transform duration-300 hover:-translate-y-0.5',
+        big ? 'w-[230px] px-4 pt-5 pb-4 sm:w-[260px]' : 'w-[138px] px-2.5 pt-3 pb-2.5 sm:w-[164px] sm:px-3',
       )}
     >
-      <Avatar staff={s} size={big ? 72 : 48} />
-      <span className={cx('mt-2 w-full truncate font-semibold', big ? 'text-[14px]' : 'text-[12px]')}>
-        {s.nickname || s.name}
+      <Avatar staff={s} size={big ? 92 : 56} className={big ? 'shadow-[0_10px_28px_-12px_rgb(20_30_60/0.5)]' : undefined} />
+      <span className={cx('mt-2.5 line-clamp-2 w-full leading-snug font-semibold text-balance', big ? 'text-[16px]' : 'text-[13px]')}>{s.name}</span>
+      {s.nickname && <span className={cx('w-full truncate text-ink-3', big ? 'text-[12px]' : 'text-[11px]')}>({s.nickname})</span>}
+      <span className={cx('mt-1 line-clamp-2 w-full leading-snug', big ? 'text-[12px] font-medium text-accent' : 'text-[11px] text-ink-2')}>
+        {s.position || s.group}
       </span>
-      <span className="w-full truncate text-[11px] text-ink-2">{s.position || s.group}</span>
       {duty && (
         <span className="mt-1 inline-flex items-center gap-0.5 text-[10px] text-ink-3">
           {duty.includes('★') && <Star className="size-2.5 fill-warn text-warn" />}
           {duty.replace(' ★', '')}
         </span>
       )}
-    </button>
+    </Tag>
   );
 }
 

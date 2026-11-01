@@ -25,9 +25,9 @@ export function Overview({
   onOpenBed: (bedNumber: string) => void;
   onAdmit: () => void;
   onView: (v: View) => void;
-  onSettings: () => void;
+  onSettings?: () => void;
 }) {
-  const { data, meta, state, commit } = useStore();
+  const { data, meta, state, commit, isStaff } = useStore();
   const now = useNow(1000);
   const today = todayKey();
   const beds = data.beds;
@@ -103,9 +103,11 @@ export function Overview({
               <Maximize className="size-4" strokeWidth={1.8} />
               โหมดเต็มจอ
             </Button>
-            <Button variant="primary" size="lg" onClick={onAdmit} disabled={free + cleaning === 0}>
-              รับผู้ป่วยใหม่
-            </Button>
+            {isStaff && (
+              <Button variant="primary" size="lg" onClick={onAdmit} disabled={free + cleaning === 0}>
+                รับผู้ป่วยใหม่
+              </Button>
+            )}
           </div>
         </div>
 
@@ -187,10 +189,12 @@ export function Overview({
             <BedCard
               key={b.bedNumber}
               bed={b}
-              sheetHref={sheetLink(meta, 'beds', b.row)}
-              onOpen={() => onOpenBed(b.bedNumber)}
-              onMarkReady={() =>
-                void commit((d) => updateBed(d, b.bedNumber, { status: 'available' }), `${b.bedNumber} ทำความสะอาดเสร็จ · พร้อมรับผู้ป่วย`)
+              sheetHref={isStaff ? sheetLink(meta, 'beds', b.row) : null}
+              onOpen={isStaff ? () => onOpenBed(b.bedNumber) : undefined}
+              onMarkReady={
+                isStaff
+                  ? () => void commit((d) => updateBed(d, b.bedNumber, { status: 'available' }), `${b.bedNumber} ทำความสะอาดเสร็จ`)
+                  : undefined
               }
             />
           ))}
@@ -340,8 +344,8 @@ export function Overview({
         </div>
       </section>
 
-      {/* Google Sheet */}
-      <section className="card relative flex flex-col items-start justify-between gap-6 overflow-hidden p-6 sm:flex-row sm:items-center sm:p-8">
+      {/* Google Sheet (เจ้าหน้าที่เท่านั้น) */}
+      {isStaff && <section className="card relative flex flex-col items-start justify-between gap-6 overflow-hidden p-6 sm:flex-row sm:items-center sm:p-8">
         <div
           aria-hidden
           className="pointer-events-none absolute -top-24 -right-16 -z-10 size-72 rounded-full opacity-60 blur-3xl"
@@ -366,7 +370,7 @@ export function Overview({
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
-          {meta && (
+          {meta?.spreadsheetUrl && (
             <a
               href={sheetLink(meta, 'beds') ?? '#'}
               target="_blank"
@@ -376,11 +380,13 @@ export function Overview({
               เปิดชีต <ArrowUpRight className="size-4" />
             </a>
           )}
-          <Button variant={state === 'local' ? 'primary' : 'secondary'} onClick={onSettings}>
-            {state === 'local' ? 'เชื่อมต่อ' : 'ตั้งค่า'}
-          </Button>
+          {onSettings && (
+            <Button variant={state === 'local' ? 'primary' : 'secondary'} onClick={onSettings}>
+              {state === 'local' ? 'เชื่อมต่อ' : 'ตั้งค่า'}
+            </Button>
+          )}
         </div>
-      </section>
+      </section>}
     </div>
   );
 }

@@ -1,6 +1,8 @@
 import {
   ArrowRightLeft,
   ArrowUpRight,
+  Download,
+  Files,
   BookOpen,
   ChevronRight,
   FileText,
@@ -23,9 +25,11 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { downloadUrl } from '../lib/content';
 import type { Doc, DocCategory, DocType } from '../types';
 import { fmtDateYear } from '../lib/date';
 import {
+  CPG,
   daysUntil,
   DOC_CATEGORIES,
   DOC_TYPES,
@@ -38,6 +42,7 @@ import {
   saveDoc,
   type ReviewState,
 } from '../lib/docs';
+import { fmtSize, MAX_FILE_MB, readDataUrl } from '../lib/files';
 import { sheetLink } from '../lib/sheetApi';
 import { useStore } from '../lib/store';
 import { Button, cx, Empty, Modal, Segmented, Switch } from './ui';
@@ -59,6 +64,7 @@ export const TYPE_ICON: Record<DocType, LucideIcon> = {
   'ระเบียบ / ข้อบังคับ': Scale,
   คู่มือ: BookOpen,
   แบบฟอร์ม: FileText,
+  เอกสารทั่วไป: Files,
 };
 
 const REVIEW_META: Record<ReviewState, { label: (d: Doc) => string; cls: string } | null> = {
@@ -79,8 +85,30 @@ const matches = (d: Doc, q: string) =>
 
 type ReviewFilter = 'all' | 'due';
 
-export function DocsPage() {
-  const { data, meta } = useStore();
+export type DocScope = 'manuals' | 'guidelines';
+
+const SCOPE = {
+  manuals: {
+    eyebrow: 'คู่มือ & SOP',
+    title: 'คลังเอกสาร ICU',
+    add: 'เพิ่มเอกสาร',
+    includes: (d: Doc) => d.type !== CPG,
+    type: 'SOP' as DocType,
+    placeholder: 'ค้นหาเอกสาร ขั้นตอน หรือคำค้น เช่น Code Blue, การเยี่ยม',
+  },
+  guidelines: {
+    eyebrow: 'แนวทางการรักษา',
+    title: 'แนวทางการรักษา (CPG)',
+    add: 'แนบแนวทางการรักษา',
+    includes: (d: Doc) => d.type === CPG,
+    type: CPG,
+    placeholder: 'ค้นหาแนวทางการรักษา เช่น Sepsis, VAP, DKA',
+  },
+};
+
+export function DocsPage({ scope = 'manuals', startNew, onStarted }: { scope?: DocScope; startNew?: boolean; onStarted?: () => void }) {
+  const { data, meta, isStaff } = useStore();
+  const sc = SCOPE[scope];
   const [q, setQ] = useState('');
   const [cat, setCat] = useState<'all' | DocCategory>('all');
   const [type, setType] = useState<'all' | DocType>('all');
@@ -88,8 +116,21 @@ export function DocsPage() {
   const [viewing, setViewing] = useState<Doc | null>(null);
   const [editing, setEditing] = useState<Doc | 'new' | null>(null);
 
-  const active = data.docs.filter((d) => d.active);
-  const archived = data.docs.filter((d) => !d.active);
+  useEffect(() => {
+    if (!startNew) return;
+    if (isStaff) setEditing('new');
+    onStarted?.();
+  }, [startNew, isStaff, onStarted]);
+
+  useEffect(() => {
+    setCat('all');
+    setType('all');
+    setQ('');
+  }, [scope]);
+
+  const docs = data.docs.filter(sc.includes);
+  const active = docs.filter((d) => d.active);
+  const archived = isStaff ? docs.filter((d) => !d.active) : [];
   const due = active.filter((d) => ['overdue', 'soon'].includes(reviewState(d)));
   const overdue = active.filter((d) => reviewState(d) === 'overdue');
 
@@ -113,10 +154,10 @@ export function DocsPage() {
   return (
     <div className="space-y-10 pt-6 sm:space-y-12 sm:pt-12">
       <section className="animate-rise">
-        <p className="eyebrow">คู่มือ & SOP</p>
+        <p className="eyebrow">{sc.eyebrow}</p>
         <div className="mt-3 flex flex-wrap items-end justify-between gap-6">
           <div>
-            <h1 className="display text-[34px] sm:text-[48px]">คลังเอกสาร ICU</h1>
+            <h1 className="display text-[34px] sm:text-[48px]">{sc.title}</h1>
             <p className="mt-2 text-[15px] text-ink-2">
               {active.length} เอกสาร · {DOC_TYPES.map((t) => ({ t, n: active.filter((d) => d.type === t).length }))
                 .filter((x) => x.n)
@@ -124,24 +165,26 @@ export function DocsPage() {
                 .join(' · ')}
             </p>
           </div>
-          <Button variant="primary" onClick={() => setEditing('new')}>
-            <Plus className="size-4" strokeWidth={2} />
-            เพิ่มเอกสาร
-          </Button>
+          {isStaff && (
+            <Button variant="primary" onClick={() => setEditing('new')}>
+              <Plus className="size-4" strokeWidth={2} />
+              {sc.add}
+            </Button>
+          )}
         </div>
 
         <label className="glass glass-strong mt-8 flex items-center gap-3 rounded-full px-5 py-1">
           <Search className="size-5 shrink-0 text-ink-3" strokeWidth={1.8} />
           <input
             className="h-12 w-full bg-transparent text-[16px] text-ink placeholder:text-ink-3 focus:outline-none"
-            placeholder="ค้นหาเอกสาร ขั้นตอน หรือคำค้น เช่น VAP, Code Blue, การเยี่ยม"
+            placeholder={sc.placeholder}
             value={q}
             onChange={(e) => setQ(e.target.value)}
             type="search"
           />
         </label>
 
-        {due.length > 0 && (
+        {isStaff && due.length > 0 && (
           <button
             type="button"
             onClick={() => setReview(review === 'due' ? 'all' : 'due')}
@@ -172,20 +215,20 @@ export function DocsPage() {
             return <Chip key={c} on={cat === c} onClick={() => setCat(cat === c ? 'all' : c)} label={c} n={n} icon={<Icon className="size-3.5" strokeWidth={1.8} />} />;
           })}
         </div>
-        <Segmented<'all' | DocType>
+        {scope === 'manuals' && <Segmented<'all' | DocType>
           size="sm"
           value={type}
           onChange={setType}
           label="ประเภทเอกสาร"
           options={[{ value: 'all', label: 'ทุกประเภท' }, ...DOC_TYPES.filter((t) => active.some((d) => d.type === t)).map((t) => ({ value: t, label: t }))]}
-        />
+        />}
       </section>
 
       {active.length === 0 ? (
         <div className="card">
           <Empty title="ยังไม่มีเอกสาร">
-            กด “เพิ่มเอกสาร” เพื่ออัปโหลด PDF หรือพิมพ์ขั้นตอน หรือกรอกในแท็บ Docs ของ Google Sheet
-            {meta && (
+            {isStaff ? `กด “${sc.add}” เพื่ออัปโหลด PDF หรือพิมพ์ขั้นตอน หรือกรอกในแท็บ Docs ของ Google Sheet` : 'เจ้าหน้าที่จะเพิ่มเอกสารที่นี่'}
+            {isStaff && meta?.spreadsheetUrl && (
               <>
                 {' · '}
                 <a className="link" href={sheetLink(meta, 'docs') ?? '#'} target="_blank" rel="noreferrer">
@@ -259,7 +302,121 @@ export function DocsPage() {
           setEditing(d);
         }}
       />
-      <DocEditor value={editing} onClose={() => setEditing(null)} />
+      <DocEditor value={editing} onClose={() => setEditing(null)} defaultType={sc.type} />
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* เอกสารดาวน์โหลด — ทุกเอกสารที่มีไฟล์แนบ                                */
+/* ------------------------------------------------------------------ */
+
+const KIND_LABEL: Record<string, string> = { pdf: 'PDF', doc: 'Google Docs', sheet: 'Google Sheets', slides: 'Google Slides', drive: 'ไฟล์', link: 'ลิงก์' };
+
+export function DownloadsPage({ startNew, onStarted }: { startNew?: boolean; onStarted?: () => void }) {
+  const { data, isStaff } = useStore();
+  const [q, setQ] = useState('');
+  const [type, setType] = useState<'all' | DocType>('all');
+  const [viewing, setViewing] = useState<Doc | null>(null);
+  const [editing, setEditing] = useState<Doc | 'new' | null>(null);
+
+  useEffect(() => {
+    if (!startNew) return;
+    if (isStaff) setEditing('new');
+    onStarted?.();
+  }, [startNew, isStaff, onStarted]);
+
+  const files = data.docs.filter((d) => d.active && d.link);
+  const list = files
+    .filter((d) => (type === 'all' || d.type === type) && (!q || matches(d, q)))
+    .sort((a, b) => (b.updatedAt || b.effectiveDate).localeCompare(a.updatedAt || a.effectiveDate));
+
+  return (
+    <div className="space-y-8 pt-6 sm:space-y-10 sm:pt-12">
+      <section className="animate-rise">
+        <p className="eyebrow">ดาวน์โหลด</p>
+        <div className="mt-3 flex flex-wrap items-end justify-between gap-6">
+          <div>
+            <h1 className="display text-[34px] sm:text-[48px]">เอกสารดาวน์โหลด</h1>
+            <p className="mt-2 text-[15px] text-ink-2">{files.length} ไฟล์ · PDF แบบฟอร์ม คู่มือ และแนวทางการรักษา</p>
+          </div>
+          {isStaff && (
+            <Button variant="primary" onClick={() => setEditing('new')}>
+              <Paperclip className="size-4" strokeWidth={2} />
+              แนบไฟล์
+            </Button>
+          )}
+        </div>
+        <label className="glass glass-strong mt-8 flex items-center gap-3 rounded-full px-5 py-1">
+          <Search className="size-5 shrink-0 text-ink-3" strokeWidth={1.8} />
+          <input
+            className="h-12 w-full bg-transparent text-[16px] text-ink placeholder:text-ink-3 focus:outline-none"
+            placeholder="ค้นหาไฟล์"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            type="search"
+          />
+        </label>
+        <div className="-mx-4 mt-4 flex gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:flex-wrap sm:px-0">
+          <Chip on={type === 'all'} onClick={() => setType('all')} label="ทั้งหมด" n={files.length} />
+          {DOC_TYPES.map((t) => {
+            const n = files.filter((d) => d.type === t).length;
+            if (!n) return null;
+            const Icon = TYPE_ICON[t];
+            return <Chip key={t} on={type === t} onClick={() => setType(type === t ? 'all' : t)} label={t} n={n} icon={<Icon className="size-3.5" strokeWidth={1.8} />} />;
+          })}
+        </div>
+      </section>
+
+      {list.length === 0 ? (
+        <div className="card">
+          <Empty title={files.length ? 'ไม่พบไฟล์ที่ค้นหา' : 'ยังไม่มีไฟล์ให้ดาวน์โหลด'}>
+            {isStaff ? 'กด “แนบไฟล์” เพื่ออัปโหลด PDF' : files.length ? 'ลองใช้คำค้นอื่น' : 'เจ้าหน้าที่จะแนบไฟล์ไว้ที่นี่'}
+          </Empty>
+        </div>
+      ) : (
+        <ul className="card divide-y divide-line overflow-hidden">
+          {list.map((d) => {
+            const Icon = TYPE_ICON[d.type];
+            const kind = fileKind(d.link);
+            return (
+              <li key={d.id} className="flex items-center gap-3 px-4 py-3.5 sm:gap-4 sm:px-6">
+                <span className="icon-chip shrink-0">
+                  <Icon className="size-[18px]" strokeWidth={1.7} />
+                </span>
+                <button type="button" onClick={() => setViewing(d)} className="min-w-0 flex-1 text-left">
+                  <span className="block truncate text-[15px] font-medium">{d.title}</span>
+                  <span className="mt-0.5 block truncate text-[12px] text-ink-3">
+                    {d.type} · {KIND_LABEL[kind] ?? 'ไฟล์'}
+                    {d.version && ` · ฉบับที่ ${d.version}`}
+                    {d.effectiveDate && ` · ${fmtDateYear(d.effectiveDate)}`}
+                  </span>
+                </button>
+                <a
+                  href={downloadUrl(d.link)}
+                  target="_blank"
+                  rel="noreferrer"
+                  aria-label={`ดาวน์โหลด ${d.title}`}
+                  className="btn-ink inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full px-3.5 text-[13px] font-medium sm:px-4"
+                >
+                  <Download className="size-4" />
+                  <span className="hidden sm:inline">ดาวน์โหลด</span>
+                </a>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+
+      <DocViewer
+        doc={viewing}
+        onClose={() => setViewing(null)}
+        onEdit={(d) => {
+          setViewing(null);
+          setEditing(d);
+        }}
+      />
+      <DocEditor value={editing} onClose={() => setEditing(null)} defaultType="เอกสารทั่วไป" requireFile />
     </div>
   );
 }
@@ -346,7 +503,7 @@ function DocRow({ d, onOpen }: { d: Doc; onOpen: () => void }) {
 /* ------------------------------------------------------------------ */
 
 function DocViewer({ doc, onClose, onEdit }: { doc: Doc | null; onClose: () => void; onEdit: (d: Doc) => void }) {
-  const { meta } = useStore();
+  const { meta, isStaff } = useStore();
   if (!doc) return <Modal open={false} onClose={onClose} title="" children={null} />;
   const steps = docSteps(doc.content);
   const preview = previewUrl(doc.link);
@@ -370,18 +527,25 @@ function DocViewer({ doc, onClose, onEdit }: { doc: Doc | null; onClose: () => v
       }
       footer={
         <>
-          {meta && doc.row && (
+          {isStaff && meta?.spreadsheetUrl && doc.row && (
             <a className="link mr-auto inline-flex items-center gap-0.5 text-[13px]" href={sheetLink(meta, 'docs', doc.row) ?? '#'} target="_blank" rel="noreferrer">
               แถวนี้ในชีต <ArrowUpRight className="size-3.5" />
             </a>
           )}
-          <Button variant="secondary" onClick={() => onEdit(doc)}>
-            <Pencil className="size-4" strokeWidth={1.8} />
-            แก้ไข
-          </Button>
+          {isStaff && (
+            <Button variant="secondary" onClick={() => onEdit(doc)}>
+              <Pencil className="size-4" strokeWidth={1.8} />
+              แก้ไข
+            </Button>
+          )}
           {doc.link && (
-            <a href={doc.link} target="_blank" rel="noreferrer" className="btn-ink inline-flex h-10 items-center gap-1.5 rounded-full px-5 text-[14px] font-medium">
+            <a href={doc.link} target="_blank" rel="noreferrer" className="btn-glass inline-flex h-10 items-center gap-1.5 rounded-full px-5 text-[14px] font-medium">
               เปิดไฟล์ <ArrowUpRight className="size-4" />
+            </a>
+          )}
+          {doc.link && ['drive', 'pdf'].includes(kind) && (
+            <a href={downloadUrl(doc.link)} target="_blank" rel="noreferrer" className="btn-ink inline-flex h-10 items-center gap-1.5 rounded-full px-5 text-[14px] font-medium">
+              <Download className="size-4" /> ดาวน์โหลด
             </a>
           )}
         </>
@@ -461,21 +625,11 @@ function Meta({ label, value, extra }: { label: string; value: string; extra?: R
 /* เพิ่ม / แก้ไขเอกสาร                                                  */
 /* ------------------------------------------------------------------ */
 
-const MAX_FILE_MB = 15;
-
-const readDataUrl = (file: File) =>
-  new Promise<string>((resolve, reject) => {
-    const r = new FileReader();
-    r.onload = () => resolve(String(r.result));
-    r.onerror = () => reject(new Error('อ่านไฟล์ไม่ได้'));
-    r.readAsDataURL(file);
-  });
-
-const blankDoc = (id: string): Doc => ({
+const blankDoc = (id: string, type: DocType = 'SOP'): Doc => ({
   id,
   title: '',
   category: 'การดูแลผู้ป่วยวิกฤต',
-  type: 'SOP',
+  type,
   summary: '',
   content: '',
   link: '',
@@ -489,7 +643,18 @@ const blankDoc = (id: string): Doc => ({
   updatedAt: '',
 });
 
-function DocEditor({ value, onClose }: { value: Doc | 'new' | null; onClose: () => void }) {
+function DocEditor({
+  value,
+  onClose,
+  defaultType = 'SOP',
+  requireFile,
+}: {
+  value: Doc | 'new' | null;
+  onClose: () => void;
+  defaultType?: DocType;
+  /** หน้าดาวน์โหลด: ต้องมีไฟล์หรือลิงก์ */
+  requireFile?: boolean;
+}) {
   const { data, commit, toast } = useStore();
   const [form, setForm] = useState<Doc>(blankDoc('D01'));
   const [tags, setTags] = useState('');
@@ -498,7 +663,7 @@ function DocEditor({ value, onClose }: { value: Doc | 'new' | null; onClose: () 
 
   useEffect(() => {
     if (!value) return;
-    const d = value === 'new' ? blankDoc(nextDocId(data.docs)) : value;
+    const d = value === 'new' ? blankDoc(nextDocId(data.docs), defaultType) : value;
     setForm(d);
     setTags(d.tags.join(', '));
     setFile(null);
@@ -509,7 +674,7 @@ function DocEditor({ value, onClose }: { value: Doc | 'new' | null; onClose: () 
 
   const pick = async (f?: File) => {
     if (!f) return;
-    if (f.size > MAX_FILE_MB * 1024 * 1024) return toast(`ไฟล์ใหญ่เกิน ${MAX_FILE_MB} MB`, 'error');
+    if (f.size > MAX_FILE_MB * 1024 * 1024) return toast(`ไฟล์ใหญ่เกิน ${MAX_FILE_MB} MB`, 'error', 'ลองย่อไฟล์ หรือวางลิงก์ Google Drive แทน');
     try {
       setFile({ name: f.name, dataUrl: await readDataUrl(f), size: f.size });
       if (!form.title.trim()) set('title', f.name.replace(/\.[^.]+$/, ''));
@@ -520,6 +685,7 @@ function DocEditor({ value, onClose }: { value: Doc | 'new' | null; onClose: () 
 
   const save = () => {
     if (!form.title.trim()) return;
+    if (requireFile && !file && !form.link.trim()) return toast('ยังไม่ได้แนบไฟล์', 'error', 'เลือกไฟล์ หรือวางลิงก์ไฟล์ก่อนบันทึก');
     const d: Doc = {
       ...form,
       title: form.title.trim(),
@@ -540,7 +706,7 @@ function DocEditor({ value, onClose }: { value: Doc | 'new' | null; onClose: () 
       open={!!value}
       onClose={onClose}
       width="max-w-2xl"
-      title={value === 'new' ? 'เพิ่มเอกสาร' : 'แก้ไขเอกสาร'}
+      title={value === 'new' ? (requireFile ? 'แนบไฟล์ดาวน์โหลด' : defaultType === CPG ? 'แนบแนวทางการรักษา' : 'เพิ่มเอกสาร') : 'แก้ไขเอกสาร'}
       subtitle={`รหัส ${form.id}`}
       footer={
         <>
@@ -601,7 +767,7 @@ function DocEditor({ value, onClose }: { value: Doc | 'new' | null; onClose: () 
             </Button>
             {file && (
               <span className="text-[12px] text-ink-2">
-                {file.name} · {(file.size / 1024 / 1024).toFixed(1)} MB (อัปโหลดเมื่อกดบันทึก)
+                {file.name} · {fmtSize(file.size)} (อัปโหลดเมื่อกดบันทึก)
               </span>
             )}
           </div>

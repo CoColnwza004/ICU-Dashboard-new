@@ -374,13 +374,100 @@ textarea {
 .animate-pulse-soft {
   animation: pulse-soft 2s ease-in-out infinite;
 }
+
+/* ป๊อปอัปกลางจอ: เด้งเข้า · วาดเครื่องหมายถูก/กากบาท */
+@keyframes pop-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.82);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(1.03);
+  }
+  100% {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes draw {
+  from {
+    stroke-dashoffset: var(--len, 48);
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+@keyframes shake {
+  0%,
+  100% {
+    transform: none;
+  }
+  20%,
+  60% {
+    transform: translateX(-6px);
+  }
+  40%,
+  80% {
+    transform: translateX(6px);
+  }
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.animate-pop {
+  animation: pop-in 0.42s var(--ease-liquid) both;
+}
+.animate-shake {
+  animation:
+    pop-in 0.3s var(--ease-apple) both,
+    shake 0.42s 0.18s var(--ease-apple);
+}
+.draw {
+  stroke-dasharray: var(--len, 48);
+  stroke-dashoffset: var(--len, 48);
+  animation: draw 0.45s 0.12s var(--ease-apple) forwards;
+}
+.draw-2 {
+  animation-delay: 0.3s;
+}
+.animate-spin-slow {
+  animation: spin 0.9s linear infinite;
+}
+
+/* การ์ดเมนู */
+.menu-card {
+  transition:
+    transform 0.5s var(--ease-liquid),
+    box-shadow 0.3s var(--ease-apple);
+}
+.menu-card:hover {
+  transform: translateY(-4px);
+}
+.menu-card:active {
+  transform: scale(0.98);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .ambient,
   .animate-rise,
   .animate-fade,
   .animate-sheet,
-  .animate-pulse-soft {
+  .animate-pulse-soft,
+  .animate-pop,
+  .animate-shake,
+  .animate-spin-slow {
     animation: none;
+  }
+  .draw {
+    animation: none;
+    stroke-dashoffset: 0;
+  }
+  .menu-card,
+  .menu-card:hover {
+    transform: none;
   }
 }
 

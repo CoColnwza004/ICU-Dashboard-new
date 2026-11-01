@@ -48,12 +48,16 @@ export function Indicators({
   onPrint,
   onPdf,
   pdfBusy,
+  startEdit: startEditIntent,
+  onStarted,
 }: {
   onPrint: (date: string) => void;
   onPdf: (date: string) => void;
   pdfBusy: boolean;
+  startEdit?: boolean;
+  onStarted?: () => void;
 }) {
-  const { data, meta, commit } = useStore();
+  const { data, meta, commit, isStaff } = useStore();
   const today = todayKey();
   const [date, setDate] = useState(today);
   const [editing, setEditing] = useState(false);
@@ -81,6 +85,18 @@ export function Indicators({
     void commit((d) => saveDaily(d, draft), `บันทึกตัวชี้วัด ${fmtDateShort(draft.date)} แล้ว`);
     setEditing(false);
   };
+
+  // มาจากหน้าเจ้าหน้าที่ → เปิดโหมดแก้ไขของวันนี้ทันที
+  useEffect(() => {
+    if (!startEditIntent) return;
+    if (isStaff) startEdit();
+    onStarted?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [startEditIntent]);
+
+  useEffect(() => {
+    if (!isStaff) setEditing(false);
+  }, [isStaff]);
 
   const trend = useMemo(() => {
     const days = Number(range);
@@ -113,7 +129,7 @@ export function Indicators({
                 : date === today
                   ? 'ยังไม่มีแถวของวันนี้ — ตัวเลขด้านล่างคำนวณจากผังเตียงปัจจุบัน'
                   : 'ยังไม่มีข้อมูลของวันนี้'}
-              {stored?.row && meta && (
+              {stored?.row && meta?.spreadsheetUrl && (
                 <>
                   {' · '}
                   <a className="link" href={sheetLink(meta, 'daily', stored.row) ?? '#'} target="_blank" rel="noreferrer">
@@ -186,9 +202,11 @@ export function Indicators({
                   <Download className="size-4" strokeWidth={1.8} />
                   {pdfBusy ? 'กำลังสร้าง PDF…' : 'บันทึก PDF'}
                 </Button>
-                <Button variant="primary" onClick={startEdit}>
-                  แก้ไข
-                </Button>
+                {isStaff && (
+                  <Button variant="primary" onClick={startEdit}>
+                    แก้ไข
+                  </Button>
+                )}
               </>
             )}
           </div>
@@ -305,7 +323,7 @@ export function Indicators({
             <p className="eyebrow">ตาราง · {RANGES.find((r) => r.value === range)?.label}ล่าสุด</p>
             <h3 className="display mt-1 text-[22px]">บันทึกรายวัน</h3>
           </div>
-          {meta && (
+          {meta?.spreadsheetUrl && (
             <a className="link inline-flex items-center gap-0.5 text-[14px]" href={sheetLink(meta, 'daily') ?? '#'} target="_blank" rel="noreferrer">
               แท็บ Daily ในชีต <ArrowUpRight className="size-3.5" />
             </a>
@@ -344,7 +362,7 @@ export function Indicators({
                       </td>
                     ))}
                     <td className="pr-6 text-right sm:pr-8">
-                      {meta && r.row && (
+                      {meta?.spreadsheetUrl && r.row && (
                         <a
                           href={sheetLink(meta, 'daily', r.row) ?? '#'}
                           target="_blank"

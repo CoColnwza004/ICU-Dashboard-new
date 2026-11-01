@@ -216,7 +216,7 @@ export function Monthly({
               ]}
               label="ตัวกรองทะเบียน"
             />
-            {meta && (
+            {meta?.spreadsheetUrl && (
               <a className="link inline-flex items-center gap-0.5 text-[14px]" href={sheetLink(meta, 'log') ?? '#'} target="_blank" rel="noreferrer">
                 แท็บ Log <ArrowUpRight className="size-3.5" />
               </a>

@@ -1,7 +1,7 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, type ButtonHTMLAttributes, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { Minus, Plus, X } from 'lucide-react';
-import type { Toast } from '../lib/store';
+import type { Notice } from '../lib/store';
 
 const cx = (...c: (string | false | null | undefined)[]) => c.filter(Boolean).join(' ');
 export { cx };
@@ -92,7 +92,7 @@ export function Segmented<T extends string>({
     if (!el) return;
     const measure = () => {
       const btn = el.querySelector<HTMLElement>('[aria-selected="true"]');
-      if (btn) setThumb({ x: btn.offsetLeft, w: btn.offsetWidth });
+      setThumb(btn ? { x: btn.offsetLeft, w: btn.offsetWidth } : null); // ไม่มีปุ่มที่เลือก (เช่น อยู่หน้าอื่น) → ซ่อน
     };
     measure();
     const ro = new ResizeObserver(measure);
@@ -337,24 +337,62 @@ export function SectionHeader({
 
 /* ------------------------------------------------------------------ */
 
-export function Toasts({ toasts }: { toasts: Toast[] }) {
-  return (
+/** ป๊อปอัปกลางจอ — ✓ เมื่อสำเร็จ, ✗ เมื่อผิดพลาด (แตะเพื่อปิด) */
+export function Popup({ notice, onClose }: { notice: Notice | null; onClose: () => void }) {
+  if (!notice) return null;
+  const { phase } = notice;
+  return createPortal(
     <div
-      aria-live="polite"
-      className="pointer-events-none fixed inset-x-0 bottom-24 z-[60] flex flex-col items-center gap-2 px-4 md:bottom-6"
+      className="pointer-events-none fixed inset-0 z-[70] flex items-center justify-center p-6"
+      role={phase === 'error' ? 'alertdialog' : 'status'}
+      aria-live={phase === 'error' ? 'assertive' : 'polite'}
     >
-      {toasts.map((t) => (
-        <div
-          key={t.id}
+      <div
+        className={cx('absolute inset-0 bg-black/10 animate-fade', phase === 'error' && 'pointer-events-auto bg-black/20')}
+        onClick={onClose}
+        aria-hidden
+      />
+      <button
+        type="button"
+        key={notice.id + phase}
+        onClick={onClose}
+        className={cx(
+          'glass glass-strong pointer-events-auto relative flex w-[min(300px,100%)] flex-col items-center rounded-[30px] px-7 pt-8 pb-7 text-center shadow-[var(--shadow-float)]',
+          phase === 'error' ? 'animate-shake' : 'animate-pop',
+        )}
+      >
+        <span
           className={cx(
-            'animate-sheet glass glass-strong pointer-events-auto max-w-md rounded-full px-5 py-2.5 text-[13px] font-medium shadow-[var(--shadow-float)]',
-            t.tone === 'error' ? 'text-critical' : 'text-ink',
+            'relative inline-flex size-[76px] items-center justify-center rounded-full',
+            phase === 'ok' && 'bg-good/14 text-good',
+            phase === 'error' && 'bg-critical/12 text-critical',
+            phase === 'saving' && 'bg-accent/10 text-accent',
           )}
         >
-          {t.text}
-        </div>
-      ))}
-    </div>
+          {phase === 'saving' ? (
+            <svg viewBox="0 0 48 48" className="animate-spin-slow size-11" aria-hidden>
+              <circle cx="24" cy="24" r="18" fill="none" stroke="currentColor" strokeOpacity="0.18" strokeWidth="4" />
+              <path d="M24 6a18 18 0 0 1 18 18" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" />
+            </svg>
+          ) : (
+            <svg viewBox="0 0 48 48" className="size-11" aria-hidden>
+              {phase === 'ok' ? (
+                <path d="M12 25.5l8 8L36.5 16" fill="none" stroke="currentColor" strokeWidth="4.5" strokeLinecap="round" strokeLinejoin="round" className="draw" style={{ ['--len' as string]: 40 }} />
+              ) : (
+                <>
+                  <path d="M15 15l18 18" fill="none" stroke="currentColor" strokeWidth="4.5" strokeLinecap="round" className="draw" style={{ ['--len' as string]: 26 }} />
+                  <path d="M33 15L15 33" fill="none" stroke="currentColor" strokeWidth="4.5" strokeLinecap="round" className="draw draw-2" style={{ ['--len' as string]: 26 }} />
+                </>
+              )}
+            </svg>
+          )}
+        </span>
+        <span className="mt-4 text-[17px] leading-snug font-semibold text-ink">{notice.text}</span>
+        {notice.detail && <span className="mt-1.5 text-[13px] leading-relaxed text-ink-2">{notice.detail}</span>}
+        {phase === 'error' && <span className="mt-4 text-[12px] text-ink-3">แตะเพื่อปิด</span>}
+      </button>
+    </div>,
+    document.body,
   );
 }
 

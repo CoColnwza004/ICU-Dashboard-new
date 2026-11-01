@@ -57,8 +57,20 @@ export function CodeChip({ code, small }: { code: string; small?: boolean }) {
   );
 }
 
-export function RosterPage({ onPrint, onPdf, pdfBusy }: { onPrint: (ym: string) => void; onPdf: (ym: string) => void; pdfBusy: boolean }) {
-  const { data, meta, commit } = useStore();
+export function RosterPage({
+  onPrint,
+  onPdf,
+  pdfBusy,
+  startEdit,
+  onStarted,
+}: {
+  onPrint: (ym: string) => void;
+  onPdf: (ym: string) => void;
+  pdfBusy: boolean;
+  startEdit?: boolean;
+  onStarted?: () => void;
+}) {
+  const { data, meta, commit, isStaff } = useStore();
   const today = todayKey();
   const [ym, setYm] = useState(today.slice(0, 7));
   const [day, setDay] = useState(Number(today.slice(8, 10)));
@@ -76,6 +88,18 @@ export function RosterPage({ onPrint, onPdf, pdfBusy }: { onPrint: (ym: string) 
   }, [ym]);
 
   const lines = useMemo(() => rosterFor(data, ym), [data, ym]);
+
+  // มาจากหน้าเจ้าหน้าที่ → เข้าโหมดจัดเวรทันที
+  useEffect(() => {
+    if (!startEdit) return;
+    if (isStaff) setEditing(true);
+    onStarted?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [startEdit]);
+
+  useEffect(() => {
+    if (!isStaff) setEditing(false);
+  }, [isStaff]);
   const keyOf = (l: (typeof lines)[number]) => l.staff?.id ?? l.row?.staffId ?? l.name;
   const codeAt = (l: (typeof lines)[number], d: number) => draft[keyOf(l)]?.[d] ?? l.days[d - 1] ?? '';
   const closePicker = useCallback(() => setPicker(null), []);
@@ -142,10 +166,10 @@ export function RosterPage({ onPrint, onPdf, pdfBusy }: { onPrint: (ym: string) 
                   <Download className="size-4" strokeWidth={1.8} />
                   {pdfBusy ? 'กำลังสร้าง PDF…' : 'บันทึก PDF'}
                 </Button>
-                <Button variant="primary" onClick={() => setEditing(true)} disabled={lines.length === 0}>
+                {isStaff && <Button variant="primary" onClick={() => setEditing(true)} disabled={lines.length === 0}>
                   <Pencil className="size-4" strokeWidth={1.8} />
                   จัดเวร
-                </Button>
+                </Button>}
               </>
             )}
           </div>
@@ -221,7 +245,7 @@ export function RosterPage({ onPrint, onPdf, pdfBusy }: { onPrint: (ym: string) 
           </div>
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-[12px] text-ink-2">
             <Legend />
-            {meta && (
+            {meta?.spreadsheetUrl && (
               <a className="link inline-flex items-center gap-0.5 text-[14px]" href={sheetLink(meta, 'roster') ?? '#'} target="_blank" rel="noreferrer">
                 แท็บ Roster <ArrowUpRight className="size-3.5" />
               </a>
