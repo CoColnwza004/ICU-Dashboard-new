@@ -136,7 +136,9 @@ function Hero({ onGo, ribbon }: { onGo: (v: View) => void; ribbon: boolean }) {
         <p className="apple-fade-in relative text-[14px] text-[#86868b] sm:text-[17px]">
           {fmtDateLong(todayKey())} · {time} น.
         </p>
-        <h1 className="apple-fade-in apple-headline relative mt-2 text-[44px] sm:text-[64px] lg:text-[80px]">ICU Smart Center</h1>
+        <h1 className="hero-title relative mt-3" aria-label="ICU Smart Center">
+          <span className="text-silver block sm:inline">ICU</span> <span className="text-intelligence">Smart Center</span>
+        </h1>
         <p className="apple-fade-in relative mt-2 text-[21px] leading-snug text-[#f5f5f7] sm:text-[28px]">ข้อมูลหอผู้ป่วยวิกฤต ครบในที่เดียว</p>
         <p className="apple-fade-in relative mt-1 text-[15px] text-[#86868b] sm:text-[17px]">{HOSPITAL}</p>
         <div className="apple-fade-in relative mt-7 flex flex-wrap justify-center gap-3 sm:gap-4">
