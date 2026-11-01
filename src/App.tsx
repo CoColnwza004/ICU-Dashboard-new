@@ -17,7 +17,7 @@ import { SettingsPanel } from './components/SettingsPanel';
 import { StaffPage } from './components/StaffPage';
 import { Stats } from './components/Stats';
 import { DashboardNav, TopBar } from './components/TopBar';
-import { Popup } from './components/ui';
+import { cx, Popup } from './components/ui';
 import { enterFullscreen, WallView } from './components/WallView';
 import { HOSPITAL } from './lib/constants';
 import { exportPdf } from './lib/pdf';
@@ -64,6 +64,14 @@ export default function App() {
     }
   }, [isStaff]);
 
+  // หน้าแรกใช้ธีมพื้นดำแบบเว็บไซต์ Apple (รวมหน้าต่าง/เมนูที่เปิดจากหน้าแรก)
+  const apple = view === 'home';
+  useEffect(() => {
+    const root = document.documentElement;
+    if (apple) root.dataset.theme = 'dark';
+    else delete root.dataset.theme;
+  }, [apple]);
+
   // พิมพ์หลังจากรายงานถูก render แล้ว
   useEffect(() => {
     if (!printJob) return;
@@ -98,55 +106,61 @@ export default function App() {
     <StoreContext.Provider value={store}>
       <div className="screen-only min-h-dvh">
         <div className="ambient" aria-hidden />
-        <TopBar view={view} onView={(v) => navigate(v)} onSettings={openSettings} onMenu={() => setMenu(true)} />
-        <main className="mx-auto max-w-[1120px] px-4 pb-32 sm:px-6 md:pb-24">
-          {sectionOf(view) === 'dashboard' && <DashboardNav view={view} onView={(v) => navigate(v)} />}
-          {view === 'home' && <HomePage onGo={(v) => navigate(v)} />}
-          {view === 'admin' && <AdminPage onGo={navigate} onSettings={() => setSettings(true)} />}
-          {view === 'news' && <NewsPage startNew={intent === 'new'} onStarted={started} />}
-          {view === 'kpi' && <KpiPage startEntry={intent === 'entry'} onStarted={started} />}
-          {view === 'forms' && <FormsPage startNew={intent === 'new'} onStarted={started} />}
-          {view === 'downloads' && <DownloadsPage startNew={intent === 'new'} onStarted={started} />}
-          {view === 'docs' && <DocsPage scope="manuals" startNew={intent === 'new'} onStarted={started} />}
-          {view === 'guidelines' && <DocsPage scope="guidelines" startNew={intent === 'new'} onStarted={started} />}
-          {view === 'roster' && (
-            <RosterPage
-              onPrint={(ym) => setPrintJob({ kind: 'roster', ym })}
-              onPdf={(ym) => setPdfJob({ kind: 'roster', ym })}
-              pdfBusy={!!pdfJob}
-              startEdit={intent === 'entry'}
-              onStarted={started}
-            />
-          )}
-          {view === 'staff' && <StaffPage startNew={intent === 'new'} onStarted={started} />}
-          {view === 'overview' && (
-            <Overview onOpenBed={setBed} onAdmit={openAdmit} onView={(v) => navigate(v)} onSettings={openSettings} />
-          )}
-          {view === 'indicators' && (
-            <Indicators
-              onPrint={(date) => setPrintJob({ kind: 'daily', date })}
-              onPdf={(date) => setPdfJob({ kind: 'daily', date })}
-              pdfBusy={!!pdfJob}
-              startEdit={intent === 'entry'}
-              onStarted={started}
-            />
-          )}
-          {view === 'stats' && (
-            <Stats
-              onPrint={(ym) => setPrintJob({ kind: 'stats', ym })}
-              onPdf={(ym) => setPdfJob({ kind: 'stats', ym })}
-              pdfBusy={!!pdfJob}
-            />
-          )}
-          {view === 'monthly' && (
-            <Monthly
-              onPrint={(ym) => setPrintJob({ kind: 'monthly', ym })}
-              onPdf={(ym) => setPdfJob({ kind: 'monthly', ym })}
-              pdfBusy={!!pdfJob}
-            />
-          )}
-        </main>
-        <footer className="border-t border-line pb-24 md:pb-0">
+        <TopBar view={view} onView={(v) => navigate(v)} onSettings={openSettings} onMenu={() => setMenu(true)} apple={apple} />
+        {apple && (
+          <main className="pb-24 md:pb-0">
+            <HomePage onGo={(v) => navigate(v)} />
+          </main>
+        )}
+        {!apple && (
+          <main className="mx-auto max-w-[1120px] px-4 pb-32 sm:px-6 md:pb-24">
+            {sectionOf(view) === 'dashboard' && <DashboardNav view={view} onView={(v) => navigate(v)} />}
+            {view === 'admin' && <AdminPage onGo={navigate} onSettings={() => setSettings(true)} />}
+            {view === 'news' && <NewsPage startNew={intent === 'new'} onStarted={started} />}
+            {view === 'kpi' && <KpiPage startEntry={intent === 'entry'} onStarted={started} />}
+            {view === 'forms' && <FormsPage startNew={intent === 'new'} onStarted={started} />}
+            {view === 'downloads' && <DownloadsPage startNew={intent === 'new'} onStarted={started} />}
+            {view === 'docs' && <DocsPage scope="manuals" startNew={intent === 'new'} onStarted={started} />}
+            {view === 'guidelines' && <DocsPage scope="guidelines" startNew={intent === 'new'} onStarted={started} />}
+            {view === 'roster' && (
+              <RosterPage
+                onPrint={(ym) => setPrintJob({ kind: 'roster', ym })}
+                onPdf={(ym) => setPdfJob({ kind: 'roster', ym })}
+                pdfBusy={!!pdfJob}
+                startEdit={intent === 'entry'}
+                onStarted={started}
+              />
+            )}
+            {view === 'staff' && <StaffPage startNew={intent === 'new'} onStarted={started} />}
+            {view === 'overview' && (
+              <Overview onOpenBed={setBed} onAdmit={openAdmit} onView={(v) => navigate(v)} onSettings={openSettings} />
+            )}
+            {view === 'indicators' && (
+              <Indicators
+                onPrint={(date) => setPrintJob({ kind: 'daily', date })}
+                onPdf={(date) => setPdfJob({ kind: 'daily', date })}
+                pdfBusy={!!pdfJob}
+                startEdit={intent === 'entry'}
+                onStarted={started}
+              />
+            )}
+            {view === 'stats' && (
+              <Stats
+                onPrint={(ym) => setPrintJob({ kind: 'stats', ym })}
+                onPdf={(ym) => setPdfJob({ kind: 'stats', ym })}
+                pdfBusy={!!pdfJob}
+              />
+            )}
+            {view === 'monthly' && (
+              <Monthly
+                onPrint={(ym) => setPrintJob({ kind: 'monthly', ym })}
+                onPdf={(ym) => setPdfJob({ kind: 'monthly', ym })}
+                pdfBusy={!!pdfJob}
+              />
+            )}
+          </main>
+        )}
+        <footer className={cx('border-t border-line pb-24 md:pb-0', apple && 'hidden')}>
           <div className="mx-auto flex max-w-[1120px] flex-wrap items-center justify-between gap-2 px-4 py-6 text-[12px] text-ink-3 sm:px-6">
             <p>{HOSPITAL} · หอผู้ป่วยวิกฤต · ข้อมูลไม่ระบุตัวตนผู้ป่วย</p>
             <button type="button" onClick={() => navigate('admin')} className="hover:text-ink">
@@ -196,7 +210,17 @@ function PdfExporter({
     void run();
   }, [job, onDone, toast]);
   return createPortal(
-    <div aria-hidden style={{ position: 'fixed', left: -10000, top: 0, width: W, background: '#fff', pointerEvents: 'none' }}>
+    <div
+      aria-hidden
+      style={{
+        position: 'fixed',
+        left: -10000,
+        top: 0,
+        width: W,
+        background: '#fff',
+        pointerEvents: 'none',
+      }}
+    >
       <div ref={ref} style={{ width: W, background: '#fff' }}>
         <PrintReport job={job} mode="pdf" />
       </div>

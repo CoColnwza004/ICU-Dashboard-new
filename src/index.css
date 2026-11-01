@@ -82,6 +82,34 @@
   }
 }
 
+/* หน้าแรกแบบเว็บไซต์ Apple: พื้นดำสนิท (ตั้งจาก App ด้วย <html data-theme="dark">) */
+:root[data-theme='dark'] {
+  --color-canvas: #000000;
+  --color-surface: #1c1c1e;
+  --color-raised: #232325;
+  --color-fill: rgb(120 120 128 / 0.32);
+  --color-fill-soft: rgb(120 120 128 / 0.18);
+  --color-line: rgb(255 255 255 / 0.1);
+  --color-line-strong: rgb(255 255 255 / 0.18);
+  --color-ink: #f5f5f7;
+  --color-ink-2: #a1a1a6;
+  --color-ink-3: #86868b;
+  --color-on-ink: #1d1d1f;
+  --color-accent: #2997ff;
+  --color-link: #2997ff;
+  --shadow-float: 0 24px 64px -20px rgb(0 0 0 / 0.85);
+  --glass-bg: rgb(38 39 46 / 0.58);
+  --glass-bg-strong: rgb(32 33 39 / 0.9);
+  --glass-edge: rgb(255 255 255 / 0.16);
+  --glass-ring: rgb(255 255 255 / 0.07);
+  --glass-sheen: rgb(255 255 255 / 0.06);
+  --glass-shadow: 0 14px 40px -18px rgb(0 0 0 / 0.75);
+  color-scheme: dark;
+}
+:root[data-theme='dark'] .ambient {
+  display: none;
+}
+
 /* ------------------------------------------------------------------ */
 /* Base                                                                */
 /* ------------------------------------------------------------------ */
@@ -511,5 +539,86 @@ textarea {
   }
   .ambient {
     display: none;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Apple-style home                                                    */
+/* ------------------------------------------------------------------ */
+.apple-nav {
+  background: rgb(22 22 23 / 0.8);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  backdrop-filter: saturate(180%) blur(20px);
+}
+.apple-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-width: 28px;
+  border-radius: 980px;
+  padding: 10px 21px;
+  font-size: 17px;
+  line-height: 1.18;
+  font-weight: 400;
+  letter-spacing: -0.022em;
+  white-space: nowrap;
+  transition:
+    background 0.2s var(--ease-apple),
+    color 0.2s var(--ease-apple);
+}
+.apple-btn-primary {
+  background: #0071e3;
+  color: #fff;
+  border: 1px solid #0071e3;
+}
+.apple-btn-primary:hover {
+  background: #0077ed;
+}
+.apple-btn-outline {
+  color: #2997ff;
+  border: 1px solid #2997ff;
+}
+.apple-btn-outline:hover {
+  background: #2997ff;
+  color: #fff;
+}
+.apple-link {
+  color: #2997ff;
+}
+.apple-link:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.apple-headline {
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  line-height: 1.1;
+}
+.apple-tile {
+  position: relative;
+  overflow: hidden;
+  background: #111112;
+  isolation: isolate;
+}
+.apple-glow {
+  position: absolute;
+  left: 50%;
+  bottom: -38%;
+  width: 90%;
+  height: 62%;
+  transform: translateX(-50%);
+  z-index: -1;
+  filter: blur(70px);
+  opacity: 0.26;
+  pointer-events: none;
+}
+.apple-fade-in {
+  animation: rise 0.9s var(--ease-apple) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .apple-fade-in {
+    animation: none;
   }
 }
