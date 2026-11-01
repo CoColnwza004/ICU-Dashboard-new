@@ -154,7 +154,6 @@ export function WallView({ onExit }: { onExit: () => void }) {
       role="region"
       aria-label="โหมดจอแสดงผลเต็มจอ"
     >
-      <div className="ambient" aria-hidden />
 
       {/* Header */}
       <header className="glass glass-strong flex shrink-0 items-center justify-between gap-4 rounded-[2.2vmin] px-[2vmin] py-[1.2vmin]">

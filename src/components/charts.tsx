@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactElement } from 'react';
+import { type ReactElement } from 'react';
 import {
   Area,
   Bar,
@@ -15,21 +15,10 @@ import {
   type TooltipContentProps,
 } from 'recharts';
 import { SERIES_DARK, SERIES_LIGHT } from '../lib/constants';
-
-const useDark = () => {
-  const q = '(prefers-color-scheme: dark)';
-  const [dark, setDark] = useState(() => typeof window !== 'undefined' && window.matchMedia(q).matches);
-  useEffect(() => {
-    const m = window.matchMedia(q);
-    const on = () => setDark(m.matches);
-    m.addEventListener('change', on);
-    return () => m.removeEventListener('change', on);
-  }, []);
-  return dark;
-};
+import { useIsDark } from '../lib/theme';
 
 export const useChartTheme = (forceLight = false) => {
-  const dark = useDark() && !forceLight;
+  const dark = useIsDark() && !forceLight;
   return dark
     ? { series: SERIES_DARK, grid: '#2c2c2e', axis: '#8e8e93', surface: '#1c1c1e', ink: '#f5f5f7' }
     : { series: SERIES_LIGHT, grid: '#ececf0', axis: '#86868b', surface: '#ffffff', ink: '#1d1d1f' };

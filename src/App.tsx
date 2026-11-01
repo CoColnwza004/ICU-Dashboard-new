@@ -17,12 +17,13 @@ import { SettingsPanel } from './components/SettingsPanel';
 import { StaffPage } from './components/StaffPage';
 import { Stats } from './components/Stats';
 import { DashboardNav, TopBar } from './components/TopBar';
-import { cx, Popup } from './components/ui';
+import { Popup } from './components/ui';
+import { SiteFooter } from './components/SiteFooter';
 import { enterFullscreen, WallView } from './components/WallView';
-import { HOSPITAL } from './lib/constants';
 import { exportPdf } from './lib/pdf';
 import { sectionOf, useHashView, type Intent, type View } from './lib/hooks';
 import { StoreContext, useIcuStore } from './lib/store';
+import { nextPref, useApplyTheme, useThemePref } from './lib/theme';
 
 export default function App() {
   const store = useIcuStore();
@@ -64,13 +65,10 @@ export default function App() {
     }
   }, [isStaff]);
 
-  // หน้าแรกใช้ธีมพื้นดำแบบเว็บไซต์ Apple (รวมหน้าต่าง/เมนูที่เปิดจากหน้าแรก)
+  // ธีม: หน้าแรกพื้นดำเสมอ · หน้าอื่นตามที่เลือก (ตามเครื่อง / สว่าง / มืด)
   const apple = view === 'home';
-  useEffect(() => {
-    const root = document.documentElement;
-    if (apple) root.dataset.theme = 'dark';
-    else delete root.dataset.theme;
-  }, [apple]);
+  const [theme, setTheme] = useThemePref();
+  useApplyTheme(theme, apple);
 
   // พิมพ์หลังจากรายงานถูก render แล้ว
   useEffect(() => {
@@ -105,15 +103,21 @@ export default function App() {
   return (
     <StoreContext.Provider value={store}>
       <div className="screen-only min-h-dvh">
-        <div className="ambient" aria-hidden />
-        <TopBar view={view} onView={(v) => navigate(v)} onSettings={openSettings} onMenu={() => setMenu(true)} apple={apple} />
+        <TopBar
+          view={view}
+          onView={(v) => navigate(v)}
+          onSettings={openSettings}
+          onMenu={() => setMenu(true)}
+          theme={theme}
+          onTheme={apple ? undefined : () => setTheme(nextPref(theme))}
+        />
         {apple && (
-          <main className="pb-24 md:pb-0">
+          <main>
             <HomePage onGo={(v) => navigate(v)} />
           </main>
         )}
         {!apple && (
-          <main className="mx-auto max-w-[1120px] px-4 pb-32 sm:px-6 md:pb-24">
+          <main className="mx-auto max-w-[1080px] px-4 pb-20 sm:px-6 sm:pb-28">
             {sectionOf(view) === 'dashboard' && <DashboardNav view={view} onView={(v) => navigate(v)} />}
             {view === 'admin' && <AdminPage onGo={navigate} onSettings={() => setSettings(true)} />}
             {view === 'news' && <NewsPage startNew={intent === 'new'} onStarted={started} />}
@@ -160,14 +164,7 @@ export default function App() {
             )}
           </main>
         )}
-        <footer className={cx('border-t border-line pb-24 md:pb-0', apple && 'hidden')}>
-          <div className="mx-auto flex max-w-[1120px] flex-wrap items-center justify-between gap-2 px-4 py-6 text-[12px] text-ink-3 sm:px-6">
-            <p>{HOSPITAL} · หอผู้ป่วยวิกฤต · ข้อมูลไม่ระบุตัวตนผู้ป่วย</p>
-            <button type="button" onClick={() => navigate('admin')} className="hover:text-ink">
-              {isStaff ? 'เจ้าหน้าที่ ICU · เข้าสู่ระบบแล้ว' : 'สำหรับเจ้าหน้าที่ ICU'}
-            </button>
-          </div>
-        </footer>
+        <SiteFooter onGo={(v) => navigate(v)} />
         <MenuSheet open={menu} onClose={() => setMenu(false)} onGo={(v) => navigate(v)} />
         {isStaff && <BedPanel bedNumber={bed} onClose={closeBed} />}
         {isStaff && <SettingsPanel open={settings} onClose={closeSettings} />}

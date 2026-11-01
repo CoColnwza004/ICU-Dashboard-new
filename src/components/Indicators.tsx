@@ -9,7 +9,7 @@ import { sheetLink } from '../lib/sheetApi';
 import { useStore } from '../lib/store';
 import { sumSlices } from '../lib/breakdowns';
 import { CHART_TYPES, DonutChart, SeriesChart, type ChartType, type SeriesDef } from './charts';
-import { Button, cx, Empty, IconButton, Segmented, Stepper } from './ui';
+import { Button, cx, Empty, IconButton, PageHero, Segmented, Stepper } from './ui';
 
 const GROUPS: { value: IndicatorGroup; label: string; title: string }[] = [
   { value: 'flow', label: 'รับ–จำหน่าย', title: 'การรับเข้าและจำหน่าย' },
@@ -116,14 +116,14 @@ export function Indicators({
   const shown = editing ? draft : record;
 
   return (
-    <div className="space-y-14 pt-6 sm:space-y-16 sm:pt-12">
+    <div className="space-y-14 sm:space-y-16">
       {/* Header */}
-      <section className="animate-rise">
-        <p className="eyebrow">12 ตัวชี้วัดรายวัน</p>
-        <div className="mt-3 flex flex-wrap items-end justify-between gap-6">
-          <div>
-            <h1 className="display text-[34px] sm:text-[48px]">{fmtDateLong(date)}</h1>
-            <p className="mt-2 text-[15px] text-ink-2">
+      <PageHero
+        eyebrow="12 ตัวชี้วัดรายวัน"
+        tone="#2a78d6"
+        title={fmtDateLong(date)}
+        subtitle={
+          <>
               {stored
                 ? 'ข้อมูลจากแท็บ Daily'
                 : date === today
@@ -137,10 +137,11 @@ export function Indicators({
                   </a>
                 </>
               )}
-            </p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="glass flex items-center gap-1 rounded-full p-1">
+          </>
+        }
+        actions={
+          <>
+            <div className="card flex items-center gap-1 rounded-full p-1">
               <IconButton label="วันก่อนหน้า" onClick={() => setDate(shiftDate(date, -1))} disabled={editing}>
                 <ChevronLeft className="size-4" />
               </IconButton>
@@ -167,9 +168,9 @@ export function Indicators({
                 วันนี้
               </Button>
             )}
-          </div>
-        </div>
-      </section>
+          </>
+        }
+      />
 
       {/* 12 indicators */}
       <section>

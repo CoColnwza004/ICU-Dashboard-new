@@ -45,7 +45,7 @@ import {
 import { fmtSize, MAX_FILE_MB, readDataUrl } from '../lib/files';
 import { sheetLink } from '../lib/sheetApi';
 import { useStore } from '../lib/store';
-import { Button, cx, Empty, Modal, Segmented, Switch } from './ui';
+import { Button, cx, Empty, Modal, PageHero, Segmented, Switch } from './ui';
 
 export const CATEGORY_ICON: Record<DocCategory, LucideIcon> = {
   ควบคุมการติดเชื้อ: ShieldCheck,
@@ -90,6 +90,7 @@ export type DocScope = 'manuals' | 'guidelines';
 const SCOPE = {
   manuals: {
     eyebrow: 'คู่มือ & SOP',
+    tone: '#008300',
     title: 'คลังเอกสาร ICU',
     add: 'เพิ่มเอกสาร',
     includes: (d: Doc) => d.type !== CPG,
@@ -98,6 +99,7 @@ const SCOPE = {
   },
   guidelines: {
     eyebrow: 'แนวทางการรักษา',
+    tone: '#d55181',
     title: 'แนวทางการรักษา (CPG)',
     add: 'แนบแนวทางการรักษา',
     includes: (d: Doc) => d.type === CPG,
@@ -152,28 +154,25 @@ export function DocsPage({ scope = 'manuals', startNew, onStarted }: { scope?: D
   }, [data.docs]);
 
   return (
-    <div className="space-y-10 pt-6 sm:space-y-12 sm:pt-12">
-      <section className="animate-rise">
-        <p className="eyebrow">{sc.eyebrow}</p>
-        <div className="mt-3 flex flex-wrap items-end justify-between gap-6">
-          <div>
-            <h1 className="display text-[34px] sm:text-[48px]">{sc.title}</h1>
-            <p className="mt-2 text-[15px] text-ink-2">
-              {active.length} เอกสาร · {DOC_TYPES.map((t) => ({ t, n: active.filter((d) => d.type === t).length }))
-                .filter((x) => x.n)
-                .map((x) => `${x.t} ${x.n}`)
-                .join(' · ')}
-            </p>
-          </div>
-          {isStaff && (
-            <Button variant="primary" onClick={() => setEditing('new')}>
+    <div className="space-y-10 sm:space-y-12">
+      <PageHero
+        eyebrow={sc.eyebrow}
+        tone={sc.tone}
+        title={sc.title}
+        subtitle={`${active.length} เอกสาร${DOC_TYPES.map((t) => ({ t, n: active.filter((d) => d.type === t).length }))
+          .filter((x) => x.n)
+          .map((x) => ` · ${x.t} ${x.n}`)
+          .join('')}`}
+        actions={
+          isStaff && (
+            <Button variant="primary" size="lg" onClick={() => setEditing('new')}>
               <Plus className="size-4" strokeWidth={2} />
               {sc.add}
             </Button>
-          )}
-        </div>
-
-        <label className="glass glass-strong mt-8 flex items-center gap-3 rounded-full px-5 py-1">
+          )
+        }
+      >
+        <label className="card mx-auto flex max-w-[680px] items-center gap-3 rounded-full px-5 py-1">
           <Search className="size-5 shrink-0 text-ink-3" strokeWidth={1.8} />
           <input
             className="h-12 w-full bg-transparent text-[16px] text-ink placeholder:text-ink-3 focus:outline-none"
@@ -189,7 +188,7 @@ export function DocsPage({ scope = 'manuals', startNew, onStarted }: { scope?: D
             type="button"
             onClick={() => setReview(review === 'due' ? 'all' : 'due')}
             className={cx(
-              'mt-4 flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-[14px] transition-colors',
+              'mx-auto mt-4 flex w-full max-w-[680px] items-center gap-3 rounded-2xl px-4 py-3 text-left text-[14px] transition-colors',
               overdue.length ? 'bg-critical/10 text-critical' : 'bg-warn/20 text-[#8a5c00]',
             )}
           >
@@ -202,11 +201,11 @@ export function DocsPage({ scope = 'manuals', startNew, onStarted }: { scope?: D
             <span className="text-[12px] underline underline-offset-2">{review === 'due' ? 'แสดงทั้งหมด' : 'ดูรายการ'}</span>
           </button>
         )}
-      </section>
+      </PageHero>
 
       {/* หมวด */}
-      <section className="-mt-4 space-y-3">
-        <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:flex-wrap sm:px-0">
+      <section className="-mt-4 flex flex-col items-center space-y-3">
+        <div className="-mx-4 flex max-w-full gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:flex-wrap sm:justify-center sm:px-0">
           <Chip on={cat === 'all'} onClick={() => setCat('all')} label="ทั้งหมด" n={active.length} />
           {DOC_CATEGORIES.map((c) => {
             const n = active.filter((d) => d.category === c).length;
@@ -332,22 +331,22 @@ export function DownloadsPage({ startNew, onStarted }: { startNew?: boolean; onS
     .sort((a, b) => (b.updatedAt || b.effectiveDate).localeCompare(a.updatedAt || a.effectiveDate));
 
   return (
-    <div className="space-y-8 pt-6 sm:space-y-10 sm:pt-12">
-      <section className="animate-rise">
-        <p className="eyebrow">ดาวน์โหลด</p>
-        <div className="mt-3 flex flex-wrap items-end justify-between gap-6">
-          <div>
-            <h1 className="display text-[34px] sm:text-[48px]">เอกสารดาวน์โหลด</h1>
-            <p className="mt-2 text-[15px] text-ink-2">{files.length} ไฟล์ · PDF แบบฟอร์ม คู่มือ และแนวทางการรักษา</p>
-          </div>
-          {isStaff && (
-            <Button variant="primary" onClick={() => setEditing('new')}>
+    <div className="space-y-8 sm:space-y-10">
+      <PageHero
+        eyebrow="ดาวน์โหลด"
+        tone="#c98500"
+        title="เอกสารดาวน์โหลด"
+        subtitle={`${files.length} ไฟล์ · PDF แบบฟอร์ม คู่มือ และแนวทางการรักษา`}
+        actions={
+          isStaff && (
+            <Button variant="primary" size="lg" onClick={() => setEditing('new')}>
               <Paperclip className="size-4" strokeWidth={2} />
               แนบไฟล์
             </Button>
-          )}
-        </div>
-        <label className="glass glass-strong mt-8 flex items-center gap-3 rounded-full px-5 py-1">
+          )
+        }
+      >
+        <label className="card mx-auto flex max-w-[680px] items-center gap-3 rounded-full px-5 py-1">
           <Search className="size-5 shrink-0 text-ink-3" strokeWidth={1.8} />
           <input
             className="h-12 w-full bg-transparent text-[16px] text-ink placeholder:text-ink-3 focus:outline-none"
@@ -357,7 +356,7 @@ export function DownloadsPage({ startNew, onStarted }: { startNew?: boolean; onS
             type="search"
           />
         </label>
-        <div className="-mx-4 mt-4 flex gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:flex-wrap sm:px-0">
+        <div className="-mx-4 mt-4 flex gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:flex-wrap sm:justify-center sm:px-0">
           <Chip on={type === 'all'} onClick={() => setType('all')} label="ทั้งหมด" n={files.length} />
           {DOC_TYPES.map((t) => {
             const n = files.filter((d) => d.type === t).length;
@@ -366,7 +365,7 @@ export function DownloadsPage({ startNew, onStarted }: { startNew?: boolean; onS
             return <Chip key={t} on={type === t} onClick={() => setType(type === t ? 'all' : t)} label={t} n={n} icon={<Icon className="size-3.5" strokeWidth={1.8} />} />;
           })}
         </div>
-      </section>
+      </PageHero>
 
       {list.length === 0 ? (
         <div className="card">

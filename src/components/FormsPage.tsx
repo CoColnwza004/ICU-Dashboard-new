@@ -5,7 +5,7 @@ import { formEmbedUrl, isSafeUrl, LINK_CATEGORIES, nextLinkId, saveLink } from '
 import { sheetLink } from '../lib/sheetApi';
 import { useStore } from '../lib/store';
 import { IconTile } from './Menu';
-import { Button, cx, Empty, Modal, Switch } from './ui';
+import { Button, cx, Empty, Modal, PageHero, Switch } from './ui';
 
 const CAT_UI: Record<LinkCategory, { icon: typeof ClipboardList; tone: string }> = {
   แบบประเมิน: { icon: ClipboardCheck, tone: '#1baf7a' },
@@ -30,22 +30,21 @@ export function FormsPage({ startNew, onStarted }: { startNew?: boolean; onStart
   const groups = LINK_CATEGORIES.map((c) => ({ c, items: active.filter((l) => l.category === c) })).filter((g) => g.items.length);
 
   return (
-    <div className="space-y-8 pt-6 sm:space-y-10 sm:pt-12">
-      <section className="animate-rise">
-        <p className="eyebrow">Google Forms</p>
-        <div className="mt-3 flex flex-wrap items-end justify-between gap-6">
-          <div>
-            <h1 className="display text-[34px] sm:text-[48px]">แบบฟอร์มออนไลน์</h1>
-            <p className="mt-2 text-[15px] text-ink-2">{active.length} แบบฟอร์ม · แบบประเมิน รายงาน และลงทะเบียน</p>
-          </div>
-          {isStaff && (
-            <Button variant="primary" onClick={() => setEditing('new')}>
+    <div className="space-y-8 sm:space-y-10">
+      <PageHero
+        eyebrow="Google Forms"
+        tone="#0071e3"
+        title="แบบฟอร์มออนไลน์"
+        subtitle={`${active.length} แบบฟอร์ม · แบบประเมิน รายงาน และลงทะเบียน`}
+        actions={
+          isStaff && (
+            <Button variant="primary" size="lg" onClick={() => setEditing('new')}>
               <Plus className="size-4" strokeWidth={2} />
               เพิ่มลิงก์ฟอร์ม
             </Button>
-          )}
-        </div>
-      </section>
+          )
+        }
+      />
 
       {active.length === 0 ? (
         <div className="card">

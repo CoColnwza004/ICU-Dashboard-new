@@ -23,7 +23,7 @@ import type { Intent, View } from '../lib/hooks';
 import { sheetLink } from '../lib/sheetApi';
 import { useStore } from '../lib/store';
 import { IconTile } from './Menu';
-import { Button, cx, Modal } from './ui';
+import { Button, cx, Modal, PageHero } from './ui';
 
 interface Action {
   title: string;
@@ -68,16 +68,18 @@ export function AdminPage({ onGo, onSettings }: { onGo: (v: View, intent?: Inten
   if (!isStaff) return <LoginCard />;
   const link = sheetLink(meta);
   return (
-    <div className="space-y-10 pt-6 sm:pt-12">
-      <section className="animate-rise flex flex-wrap items-end justify-between gap-6">
-        <div>
-          <p className="eyebrow inline-flex items-center gap-1.5 text-good">
+    <div className="space-y-10">
+      <PageHero
+        eyebrow={
+          <span className="inline-flex items-center gap-1.5">
             <ShieldCheck className="size-4" /> เข้าสู่ระบบเจ้าหน้าที่แล้ว
-          </p>
-          <h1 className="display mt-3 text-[34px] sm:text-[48px]">เจ้าหน้าที่ ICU</h1>
-          <p className="mt-2 text-[15px] text-ink-2">เลือกงานที่ต้องการ — ทุกการแก้ไขบันทึกลง Google Sheet ทันที</p>
-        </div>
-        <div className="flex flex-wrap gap-2">
+          </span>
+        }
+        tone="var(--color-good)"
+        title="เจ้าหน้าที่ ICU"
+        subtitle="เลือกงานที่ต้องการ — ทุกการแก้ไขบันทึกลง Google Sheet ทันที"
+        actions={
+          <>
           {link && (
             <a href={link} target="_blank" rel="noreferrer" className="btn-glass inline-flex h-10 items-center gap-1.5 rounded-full px-4 text-[14px] font-medium">
               <SheetIcon className="size-4" strokeWidth={1.7} /> Google Sheet
@@ -92,8 +94,9 @@ export function AdminPage({ onGo, onSettings }: { onGo: (v: View, intent?: Inten
           <Button variant="danger" onClick={logout}>
             <LogOut className="size-4" strokeWidth={1.8} /> ออกจากระบบ
           </Button>
-        </div>
-      </section>
+          </>
+        }
+      />
 
       {ACTIONS.map((g) => (
         <section key={g.title}>

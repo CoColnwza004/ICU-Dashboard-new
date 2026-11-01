@@ -9,7 +9,7 @@ import { useStore } from '../lib/store';
 import type { IcuData } from '../types';
 import { admitAcuitySlices, dischargeSlices, sumSlices } from '../lib/breakdowns';
 import { CHART_TYPES, DonutChart, SeriesChart, type ChartType } from './charts';
-import { Button, Dot, Empty, Segmented } from './ui';
+import { Button, Dot, Empty, PageHero, Segmented } from './ui';
 
 type Filter = 'all' | 'in' | 'out';
 
@@ -75,18 +75,16 @@ export function Monthly({
   ];
 
   return (
-    <div className="space-y-14 pt-6 sm:space-y-16 sm:pt-12">
-      <section className="animate-rise">
-        <p className="eyebrow">รายงานประจำเดือน</p>
-        <div className="mt-3 flex flex-wrap items-end justify-between gap-6">
-          <div>
-            <h1 className="display text-[34px] sm:text-[48px]">{fmtMonth(ym)}</h1>
-            <p className="mt-2 text-[15px] text-ink-2">
-              ข้อมูล {s.days.length} วัน · {s.patientDays} patient-days
-              {s.peak && s.peak.totalInWard > 0 && ` · สูงสุด ${s.peak.totalInWard} ราย (${fmtDateShort(s.peak.date)})`}
-            </p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
+    <div className="space-y-14 sm:space-y-16">
+      <PageHero
+        eyebrow="รายงานประจำเดือน"
+        tone="#6250d6"
+        title={fmtMonth(ym)}
+        subtitle={`ข้อมูล ${s.days.length} วัน · ${s.patientDays} patient-days${
+          s.peak && s.peak.totalInWard > 0 ? ` · สูงสุด ${s.peak.totalInWard} ราย (${fmtDateShort(s.peak.date)})` : ''
+        }`}
+        actions={
+          <>
             <select
               aria-label="เลือกเดือน"
               className="field btn-glass h-10 w-auto rounded-full py-0 pr-9"
@@ -107,13 +105,15 @@ export function Monthly({
               พิมพ์
             </Button>
             <Button variant="primary" onClick={() => onPdf(ym)} disabled={pdfBusy}>
-                  <Download className="size-4" strokeWidth={1.8} />
-                  {pdfBusy ? 'กำลังสร้าง PDF…' : 'บันทึก PDF'}
-                </Button>
-          </div>
-        </div>
+              <Download className="size-4" strokeWidth={1.8} />
+              {pdfBusy ? 'กำลังสร้าง PDF…' : 'บันทึก PDF'}
+            </Button>
+          </>
+        }
+      />
 
-        <div className="mt-10 mb-3 flex flex-wrap items-center justify-between gap-2 text-[13px] text-ink-2">
+      <section>
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2 text-[13px] text-ink-2">
           <span>
             ADC · ALOS · BOR · BTR · TOI {st.saved ? 'จากแท็บ Stats' : 'คำนวณจากข้อมูลในระบบ'} ({st.input.beds} เตียง ·{' '}
             {st.input.days} วัน · วันนอนรวม {st.input.patientDays} · จำหน่าย {st.input.discharges})

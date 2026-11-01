@@ -6,7 +6,7 @@ import { fmtDateYear, todayKey } from '../lib/date';
 import { fmtSize, MAX_FILE_MB, readDataUrl, resizeImage } from '../lib/files';
 import { sheetLink } from '../lib/sheetApi';
 import { useStore } from '../lib/store';
-import { Button, cx, Empty, Modal, Switch } from './ui';
+import { Button, cx, Empty, Modal, PageHero, Switch } from './ui';
 
 export const NEWS_TONE: Record<NewsCategory, string> = {
   ด่วน: 'bg-critical/12 text-critical',
@@ -50,7 +50,7 @@ export function NewsCard({ n, onOpen, featured }: { n: News; onOpen: () => void;
     <button
       type="button"
       onClick={onOpen}
-      className={cx('card menu-card group flex overflow-hidden text-left', featured ? 'flex-col md:flex-row' : 'flex-col', !n.published && 'opacity-60')}
+      className={cx('card menu-card group flex w-full overflow-hidden text-left', featured ? 'flex-col md:flex-row' : 'flex-col', !n.published && 'opacity-60')}
     >
       <NewsImage n={n} className={cx('w-full shrink-0', featured ? 'aspect-[16/9] md:aspect-auto md:min-h-[260px] md:w-[52%]' : 'aspect-[16/9]')} />
       <div className={cx('flex flex-1 flex-col', featured ? 'p-6 sm:p-7' : 'p-5')}>
@@ -126,24 +126,22 @@ export function NewsPage({ startNew, onStarted }: { startNew?: boolean; onStarte
   const [lead, ...rest] = list;
 
   return (
-    <div className="space-y-8 pt-6 sm:space-y-10 sm:pt-12">
-      <section className="animate-rise">
-        <p className="eyebrow">ข่าวสาร</p>
-        <div className="mt-3 flex flex-wrap items-end justify-between gap-6">
-          <div>
-            <h1 className="display text-[34px] sm:text-[48px]">ข่าวสาร & ประกาศ</h1>
-            <p className="mt-2 text-[15px] text-ink-2">
-              {visible.length} รายการ{visible.filter((n) => isNewNews(n)).length > 0 && ` · ใหม่ ${visible.filter((n) => isNewNews(n)).length}`}
-            </p>
-          </div>
-          {isStaff && (
-            <Button variant="primary" onClick={() => setEditing('new')}>
+    <div className="space-y-8 sm:space-y-10">
+      <PageHero
+        eyebrow="ข่าวสาร"
+        tone="#eb6834"
+        title="ข่าวสาร & ประกาศ"
+        subtitle={`${visible.length} รายการ${visible.filter((n) => isNewNews(n)).length > 0 ? ` · ใหม่ ${visible.filter((n) => isNewNews(n)).length}` : ''}`}
+        actions={
+          isStaff && (
+            <Button variant="primary" size="lg" onClick={() => setEditing('new')}>
               <Plus className="size-4" strokeWidth={2} />
               ประกาศข่าว
             </Button>
-          )}
-        </div>
-        <div className="-mx-4 mt-6 flex gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:flex-wrap sm:px-0">
+          )
+        }
+      >
+        <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:flex-wrap sm:justify-center sm:px-0">
           <Chip on={cat === 'all'} onClick={() => setCat('all')}>
             ทั้งหมด
           </Chip>
@@ -153,7 +151,7 @@ export function NewsPage({ startNew, onStarted }: { startNew?: boolean; onStarte
             </Chip>
           ))}
         </div>
-      </section>
+      </PageHero>
 
       {list.length === 0 ? (
         <div className="card">

@@ -22,7 +22,7 @@ import {
 import { sheetLink } from '../lib/sheetApi';
 import { useStore } from '../lib/store';
 import { Avatar } from './Avatar';
-import { Button, cx, Empty } from './ui';
+import { Button, cx, Empty, PageHero } from './ui';
 
 export const SHIFT_COLOR: Record<ShiftKey, string> = { M: '#2a78d6', A: '#eb6834', N: '#6250d6' };
 
@@ -126,20 +126,23 @@ export function RosterPage({
   }, [data, draft, ym, changed]);
 
   return (
-    <div className="space-y-10 pt-6 sm:space-y-12 sm:pt-12">
-      <section className="animate-rise">
-        <p className="eyebrow">ตารางเวร</p>
-        <div className="mt-3 flex flex-wrap items-end justify-between gap-6">
-          <div className="flex items-center gap-3">
-            <button type="button" aria-label="เดือนก่อน" onClick={() => setYm(shiftMonth(ym, -1))} className="btn-glass inline-flex size-10 items-center justify-center rounded-full">
+    <div className="space-y-10 sm:space-y-12">
+      <PageHero
+        eyebrow="ตารางเวร"
+        tone="#1baf7a"
+        title={
+          <span className="inline-flex items-center gap-3 sm:gap-5">
+            <button type="button" aria-label="เดือนก่อน" onClick={() => setYm(shiftMonth(ym, -1))} className="btn-glass inline-flex size-10 shrink-0 items-center justify-center rounded-full">
               <ChevronLeft className="size-5" />
             </button>
-            <h1 className="display text-[30px] sm:text-[44px]">{fmtMonth(ym)}</h1>
-            <button type="button" aria-label="เดือนถัดไป" onClick={() => setYm(shiftMonth(ym, 1))} className="btn-glass inline-flex size-10 items-center justify-center rounded-full">
+            {fmtMonth(ym)}
+            <button type="button" aria-label="เดือนถัดไป" onClick={() => setYm(shiftMonth(ym, 1))} className="btn-glass inline-flex size-10 shrink-0 items-center justify-center rounded-full">
               <ChevronRight className="size-5" />
             </button>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
+          </span>
+        }
+        actions={
+          <>
             {editing ? (
               <>
                 <Button
@@ -172,9 +175,9 @@ export function RosterPage({
                 </Button>}
               </>
             )}
-          </div>
-        </div>
-      </section>
+          </>
+        }
+      />
 
       {/* เวรของวันที่เลือก */}
       <section>

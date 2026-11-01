@@ -7,7 +7,7 @@ import { joinName, NAME_PREFIXES, parseCode, realName, rosterFor, SHIFT_BY_KEY, 
 import { sheetLink } from '../lib/sheetApi';
 import { useStore } from '../lib/store';
 import { Avatar } from './Avatar';
-import { Button, cx, Empty, Modal, Segmented, Switch } from './ui';
+import { Button, cx, Empty, Modal, PageHero, Segmented, Switch } from './ui';
 
 export const STAFF_GROUPS: StaffGroup[] = ['แพทย์', 'พยาบาล', 'ผู้ช่วยพยาบาล', 'พนักงานช่วยเหลือคนไข้', 'อื่นๆ'];
 
@@ -63,18 +63,14 @@ export function StaffPage({ startNew, onStarted }: { startNew?: boolean; onStart
   const inactive = isStaff ? data.staff.filter((s) => !s.active) : [];
 
   return (
-    <div className="space-y-10 pt-6 sm:space-y-12 sm:pt-12">
-      <section className="animate-rise">
-        <p className="eyebrow">บุคลากร</p>
-        <div className="mt-3 flex flex-wrap items-end justify-between gap-6">
-          <div>
-            <h1 className="display text-[34px] sm:text-[48px]">{mode === 'org' ? 'ผังบริหารงาน ICU' : 'ทีม ICU'}</h1>
-            <p className="mt-2 text-[15px] text-ink-2">
-              {active.length} คน
-              {counts.map((c) => ` · ${c.g} ${c.n}`).join('')}
-            </p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
+    <div className="space-y-10 sm:space-y-12">
+      <PageHero
+        eyebrow="บุคลากร"
+        tone="#6250d6"
+        title={mode === 'org' ? 'ผังบริหารงาน ICU' : 'ทีม ICU'}
+        subtitle={`${active.length} คน${counts.map((c) => ` · ${c.g} ${c.n}`).join('')}`}
+        actions={
+          <>
             <Segmented<Mode>
               value={mode}
               onChange={setMode}
@@ -104,9 +100,9 @@ export function StaffPage({ startNew, onStarted }: { startNew?: boolean; onStart
                 เพิ่มบุคลากร
               </Button>
             )}
-          </div>
-        </div>
-      </section>
+          </>
+        }
+      />
 
       {active.length === 0 ? (
         <div className="card">

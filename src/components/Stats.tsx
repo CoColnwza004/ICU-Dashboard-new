@@ -5,7 +5,7 @@ import { availableMonths, saveStats } from '../lib/logic';
 import { sheetLink } from '../lib/sheetApi';
 import { autoStatsInput, computeStats, findStats, fmtStat, STAT_DEFS, type StatsInput } from '../lib/stats';
 import { useStore } from '../lib/store';
-import { Button, cx, Empty } from './ui';
+import { Button, cx, Empty, PageHero } from './ui';
 import { Ring } from './viz';
 
 const FIELDS: { key: keyof StatsInput; label: string; hint: string; icon: ReactNode }[] = [
@@ -62,13 +62,13 @@ export function Stats({
   const differsFromAuto = FIELDS.some((f) => draft[f.key] !== auto[f.key]);
 
   return (
-    <div className="space-y-14 pt-6 sm:space-y-16 sm:pt-12">
-      <section className="animate-rise">
-        <p className="eyebrow">สถิติการใช้เตียง · ADC · ALOS · BOR · BTR · TOI</p>
-        <div className="mt-3 flex flex-wrap items-end justify-between gap-6">
-          <div>
-            <h1 className="display text-[34px] sm:text-[48px]">{fmtMonth(ym)}</h1>
-            <p className="mt-2 text-[15px] text-ink-2">
+    <div className="space-y-14 sm:space-y-16">
+      <PageHero
+        eyebrow="สถิติการใช้เตียง · ADC · ALOS · BOR · BTR · TOI"
+        tone="#008300"
+        title={fmtMonth(ym)}
+        subtitle={
+          <>
               {saved ? 'บันทึกแล้วในแท็บ Stats' : 'ยังไม่บันทึก — ค่าด้านล่างคำนวณจากข้อมูลในระบบ'}
               {saved?.row && meta?.spreadsheetUrl && (
                 <>
@@ -78,9 +78,10 @@ export function Stats({
                   </a>
                 </>
               )}
-            </p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
+          </>
+        }
+        actions={
+          <>
             <select
               aria-label="เลือกเดือน"
               className="field btn-glass h-10 w-auto rounded-full py-0 pr-9"
@@ -98,12 +99,12 @@ export function Stats({
               พิมพ์
             </Button>
             <Button variant="secondary" onClick={() => onPdf(ym)} disabled={pdfBusy}>
-                  <Download className="size-4" strokeWidth={1.8} />
-                  {pdfBusy ? 'กำลังสร้าง PDF…' : 'บันทึก PDF'}
-                </Button>
-          </div>
-        </div>
-      </section>
+              <Download className="size-4" strokeWidth={1.8} />
+              {pdfBusy ? 'กำลังสร้าง PDF…' : 'บันทึก PDF'}
+            </Button>
+          </>
+        }
+      />
 
       <section className="grid gap-4 lg:grid-cols-3">
         {/* Input form */}

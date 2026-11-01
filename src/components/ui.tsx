@@ -316,6 +316,39 @@ export function Modal({
 
 /* ------------------------------------------------------------------ */
 
+/** หัวหน้าแบบเว็บไซต์ Apple: ป้ายสีเล็ก · หัวข้อใหญ่กลางจอ · คำอธิบาย · ปุ่มเม็ดยา */
+export function PageHero({
+  eyebrow,
+  tone,
+  title,
+  subtitle,
+  actions,
+  children,
+}: {
+  eyebrow?: ReactNode;
+  /** สีของป้ายเล็กด้านบน */
+  tone?: string;
+  title: ReactNode;
+  subtitle?: ReactNode;
+  actions?: ReactNode;
+  /** เนื้อหาเพิ่มใต้ปุ่ม เช่น ช่องค้นหา ตัวเลือกเดือน */
+  children?: ReactNode;
+}) {
+  return (
+    <section className="animate-rise pt-10 text-center sm:pt-16">
+      {eyebrow && (
+        <p className="text-[15px] font-semibold sm:text-[17px]" style={{ color: tone ?? 'var(--color-accent)' }}>
+          {eyebrow}
+        </p>
+      )}
+      <h1 className="apple-headline mt-1 text-[36px] sm:text-[52px]">{title}</h1>
+      {subtitle && <div className="mx-auto mt-2 max-w-2xl text-[17px] leading-snug text-ink-2 sm:text-[21px]">{subtitle}</div>}
+      {actions && <div className="mt-6 flex flex-wrap items-center justify-center gap-3">{actions}</div>}
+      {children && <div className="mt-8">{children}</div>}
+    </section>
+  );
+}
+
 export function SectionHeader({
   eyebrow,
   title,

@@ -21,7 +21,7 @@ import { fmtMonth, todayKey } from '../lib/date';
 import { sheetLink } from '../lib/sheetApi';
 import { useStore } from '../lib/store';
 import { useChartTheme } from './charts';
-import { Button, cx, Empty, Modal, Segmented, Switch } from './ui';
+import { Button, cx, Empty, Modal, PageHero, Segmented, Switch } from './ui';
 
 const STATUS_UI: Record<KpiPoint['status'], { label: string; cls: string; icon: typeof Check }> = {
   pass: { label: 'ผ่านเป้า', cls: 'bg-good/14 text-good', icon: Check },
@@ -70,29 +70,28 @@ export function KpiPage({ startEntry, onStarted }: { startEntry?: boolean; onSta
   const noData = pts.filter((p) => p.value === null).length;
 
   return (
-    <div className="space-y-8 pt-6 sm:space-y-10 sm:pt-12">
-      <section className="animate-rise">
-        <p className="eyebrow">Quality KPI</p>
-        <div className="mt-3 flex flex-wrap items-end justify-between gap-6">
-          <div>
-            <h1 className="display text-[34px] sm:text-[48px]">ตัวชี้วัดคุณภาพ</h1>
-            <p className="mt-2 text-[15px] text-ink-2">{kpis.length} ตัวชี้วัด · เทียบผลกับเป้าหมายรายเดือน</p>
-          </div>
-          {isStaff && (
-            <div className="flex flex-wrap gap-2">
-              <Button variant="secondary" onClick={() => setManage(true)}>
-                <Settings2 className="size-4" strokeWidth={1.8} />
-                ตั้งค่าตัวชี้วัด
-              </Button>
-              <Button variant="primary" onClick={() => setEntry(true)}>
+    <div className="space-y-8 sm:space-y-10">
+      <PageHero
+        eyebrow="Quality KPI"
+        tone="#e34948"
+        title="ตัวชี้วัดคุณภาพ"
+        subtitle={`${kpis.length} ตัวชี้วัด · เทียบผลกับเป้าหมายรายเดือน`}
+        actions={
+          isStaff && (
+            <>
+              <Button variant="primary" size="lg" onClick={() => setEntry(true)}>
                 <PencilLine className="size-4" strokeWidth={1.8} />
                 กรอกผล KPI
               </Button>
-            </div>
-          )}
-        </div>
-
-        <div className="mt-8 flex flex-wrap items-center gap-3">
+              <Button variant="secondary" size="lg" onClick={() => setManage(true)}>
+                <Settings2 className="size-4" strokeWidth={1.8} />
+                ตั้งค่าตัวชี้วัด
+              </Button>
+            </>
+          )
+        }
+      >
+        <div className="flex flex-wrap items-center justify-center gap-3">
           <div className="flex items-center gap-1">
             <button type="button" aria-label="เดือนก่อน" onClick={() => setYm(shiftMonth(ym, -1))} className="btn-glass inline-flex size-10 items-center justify-center rounded-full">
               <ChevronLeft className="size-5" />
@@ -114,7 +113,7 @@ export function KpiPage({ startEntry, onStarted }: { startEntry?: boolean; onSta
             <Summary n={noData} label="ยังไม่มีข้อมูล" cls="text-ink-3" />
           </div>
         </div>
-      </section>
+      </PageHero>
 
       {kpis.length === 0 ? (
         <div className="card">
@@ -158,7 +157,7 @@ export function KpiPage({ startEntry, onStarted }: { startEntry?: boolean; onSta
 
 function Summary({ n, label, cls }: { n: number; label: string; cls: string }) {
   return (
-    <span className="glass inline-flex h-10 items-center gap-1.5 rounded-full px-4">
+    <span className="card inline-flex h-10 items-center gap-1.5 rounded-full px-4">
       <span className={cx('num text-[16px] font-semibold', cls)}>{n}</span>
       <span className="text-ink-2">{label}</span>
     </span>

@@ -1,23 +1,36 @@
 @import 'tailwindcss';
 
 /* ------------------------------------------------------------------ */
-/* Design tokens — Liquid Glass (frosted, not too clear)               */
+/* Design tokens — เรียบแบบเว็บไซต์ Apple · โหมดสว่าง / มืด                */
+/*   html ไม่มี data-theme  → ตามการตั้งค่าของเครื่อง                         */
+/*   data-theme="light" / "dark" → ผู้ใช้เลือกเอง (หน้าแรกใช้ dark เสมอ)       */
 /* ------------------------------------------------------------------ */
+@custom-variant dark {
+  &:where([data-theme='dark'], [data-theme='dark'] *) {
+    @slot;
+  }
+  @media (prefers-color-scheme: dark) {
+    &:where(:root:not([data-theme='light']), :root:not([data-theme='light']) *) {
+      @slot;
+    }
+  }
+}
+
 @theme {
   /* ใช้ฟอนต์เว็บชุดเดียวกันทุกอุปกรณ์ (iPhone / iPad / Android / คอมพิวเตอร์) ไม่ใช้ฟอนต์ระบบของเครื่อง */
   --font-sans: 'Inter', 'Noto Sans Thai', system-ui, sans-serif;
   --font-display: 'Inter', 'Noto Sans Thai', system-ui, sans-serif;
 
-  --color-canvas: #eef0f5;
+  --color-canvas: #f5f5f7;
   --color-surface: #ffffff;
   --color-raised: #fbfbfd;
-  --color-fill: rgb(118 118 128 / 0.16);
-  --color-fill-soft: rgb(118 118 128 / 0.09);
-  --color-line: rgb(60 60 67 / 0.1);
-  --color-line-strong: rgb(60 60 67 / 0.2);
+  --color-fill: rgb(118 118 128 / 0.14);
+  --color-fill-soft: rgb(118 118 128 / 0.08);
+  --color-line: rgb(0 0 0 / 0.08);
+  --color-line-strong: rgb(0 0 0 / 0.16);
   --color-ink: #1d1d1f;
-  --color-ink-2: #5f5f66;
-  --color-ink-3: #7d7d85;
+  --color-ink-2: #6e6e73;
+  --color-ink-3: #86868b;
   --color-on-ink: #ffffff;
   --color-accent: #0071e3;
   --color-link: #0066cc;
@@ -27,62 +40,31 @@
   --color-serious: #ec835a;
   --color-critical: #d03b3b;
 
-  --radius-card: 26px;
-  --shadow-float: 0 24px 64px -20px rgb(20 30 60 / 0.35);
+  --radius-card: 22px;
+  --shadow-float: 0 24px 64px -20px rgb(0 0 0 / 0.3);
   --ease-apple: cubic-bezier(0.25, 0.1, 0.25, 1);
   --ease-liquid: cubic-bezier(0.34, 1.32, 0.5, 1);
 }
 
 :root {
-  /* glass material */
-  --glass-bg: rgb(255 255 255 / 0.62);
-  --glass-bg-strong: rgb(255 255 255 / 0.82);
-  --glass-edge: rgb(255 255 255 / 0.95);
-  --glass-ring: rgb(255 255 255 / 0.45);
-  --glass-sheen: rgb(255 255 255 / 0.5);
-  --glass-shadow: 0 1px 2px rgb(20 30 60 / 0.05), 0 14px 40px -18px rgb(20 30 60 / 0.28);
-  --glass-blur: blur(28px) saturate(185%);
-
-  /* ambient background */
-  --amb-1: #c7d7ff;
-  --amb-2: #e3d6ff;
-  --amb-3: #c9eee2;
-  --amb-4: #ffe0cc;
+  --well: #f5f5f7;
+  --nav-bg: rgb(251 251 253 / 0.8);
+  --nav-ink: #1d1d1f;
+  --btn-2: #e8e8ed;
+  --btn-2-hover: #dcdce1;
+  --card-ring: rgb(0 0 0 / 0.04);
+  --footer-bg: #f5f5f7;
+  /* หน้าต่าง/ป๊อปอัปยังเป็นกระจกฝ้าแบบ iOS */
+  --glass-bg: rgb(255 255 255 / 0.72);
+  --glass-bg-strong: rgb(255 255 255 / 0.9);
+  --glass-edge: rgb(255 255 255 / 0.9);
+  --glass-ring: rgb(0 0 0 / 0.05);
+  --glass-shadow: 0 1px 2px rgb(0 0 0 / 0.04), 0 14px 40px -18px rgb(0 0 0 / 0.25);
+  --glass-blur: blur(24px) saturate(180%);
+  color-scheme: light;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --color-canvas: #07080b;
-    --color-surface: #1c1c1e;
-    --color-raised: #232325;
-    --color-fill: rgb(120 120 128 / 0.32);
-    --color-fill-soft: rgb(120 120 128 / 0.18);
-    --color-line: rgb(255 255 255 / 0.09);
-    --color-line-strong: rgb(255 255 255 / 0.18);
-    --color-ink: #f5f5f7;
-    --color-ink-2: #aeaeb4;
-    --color-ink-3: #8e8e95;
-    --color-on-ink: #1d1d1f;
-    --color-accent: #2997ff;
-    --color-link: #4aa8ff;
-    --shadow-float: 0 24px 64px -20px rgb(0 0 0 / 0.85);
-
-    --glass-bg: rgb(38 39 46 / 0.58);
-    --glass-bg-strong: rgb(32 33 39 / 0.86);
-    --glass-edge: rgb(255 255 255 / 0.2);
-    --glass-ring: rgb(255 255 255 / 0.07);
-    --glass-sheen: rgb(255 255 255 / 0.07);
-    --glass-shadow: 0 14px 40px -18px rgb(0 0 0 / 0.75);
-
-    --amb-1: #1b2b55;
-    --amb-2: #2d1f4d;
-    --amb-3: #0f3a33;
-    --amb-4: #3d2418;
-    color-scheme: dark;
-  }
-}
-
-/* หน้าแรกแบบเว็บไซต์ Apple: พื้นดำสนิท (ตั้งจาก App ด้วย <html data-theme="dark">) */
+/* โหมดมืด: เลือกเอง หรือ ตามเครื่อง (ถ้าไม่ได้เลือกโหมดสว่าง) */
 :root[data-theme='dark'] {
   --color-canvas: #000000;
   --color-surface: #1c1c1e;
@@ -98,16 +80,50 @@
   --color-accent: #2997ff;
   --color-link: #2997ff;
   --shadow-float: 0 24px 64px -20px rgb(0 0 0 / 0.85);
-  --glass-bg: rgb(38 39 46 / 0.58);
-  --glass-bg-strong: rgb(32 33 39 / 0.9);
-  --glass-edge: rgb(255 255 255 / 0.16);
+  --well: #2c2c2e;
+  --nav-bg: rgb(22 22 23 / 0.8);
+  --nav-ink: #e8e8ed;
+  --btn-2: #2c2c2e;
+  --btn-2-hover: #3a3a3c;
+  --card-ring: rgb(255 255 255 / 0.06);
+  --footer-bg: #161617;
+  --glass-bg: rgb(38 38 42 / 0.66);
+  --glass-bg-strong: rgb(30 30 32 / 0.92);
+  --glass-edge: rgb(255 255 255 / 0.12);
   --glass-ring: rgb(255 255 255 / 0.07);
-  --glass-sheen: rgb(255 255 255 / 0.06);
   --glass-shadow: 0 14px 40px -18px rgb(0 0 0 / 0.75);
   color-scheme: dark;
 }
-:root[data-theme='dark'] .ambient {
-  display: none;
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --color-canvas: #000000;
+    --color-surface: #1c1c1e;
+    --color-raised: #232325;
+    --color-fill: rgb(120 120 128 / 0.32);
+    --color-fill-soft: rgb(120 120 128 / 0.18);
+    --color-line: rgb(255 255 255 / 0.1);
+    --color-line-strong: rgb(255 255 255 / 0.18);
+    --color-ink: #f5f5f7;
+    --color-ink-2: #a1a1a6;
+    --color-ink-3: #86868b;
+    --color-on-ink: #1d1d1f;
+    --color-accent: #2997ff;
+    --color-link: #2997ff;
+    --shadow-float: 0 24px 64px -20px rgb(0 0 0 / 0.85);
+    --well: #2c2c2e;
+    --nav-bg: rgb(22 22 23 / 0.8);
+    --nav-ink: #e8e8ed;
+    --btn-2: #2c2c2e;
+    --btn-2-hover: #3a3a3c;
+    --card-ring: rgb(255 255 255 / 0.06);
+    --footer-bg: #161617;
+    --glass-bg: rgb(38 38 42 / 0.66);
+    --glass-bg-strong: rgb(30 30 32 / 0.92);
+    --glass-edge: rgb(255 255 255 / 0.12);
+    --glass-ring: rgb(255 255 255 / 0.07);
+    --glass-shadow: 0 14px 40px -18px rgb(0 0 0 / 0.75);
+    color-scheme: dark;
+  }
 }
 
 /* ------------------------------------------------------------------ */
@@ -165,35 +181,19 @@ textarea {
   }
 }
 
-/* Soft colour field behind the glass — slow drift, very low contrast */
-.ambient {
-  position: fixed;
-  inset: -10%;
-  z-index: -1;
-  pointer-events: none;
-  background:
-    radial-gradient(38% 42% at 12% 8%, var(--amb-1), transparent 70%),
-    radial-gradient(34% 40% at 92% 14%, var(--amb-2), transparent 70%),
-    radial-gradient(40% 44% at 78% 88%, var(--amb-3), transparent 70%),
-    radial-gradient(36% 38% at 8% 82%, var(--amb-4), transparent 70%),
-    var(--color-canvas);
-  animation: drift 60s ease-in-out infinite alternate;
-}
-@keyframes drift {
-  from {
-    transform: translate3d(0, 0, 0) scale(1);
-  }
-  to {
-    transform: translate3d(-3%, 2%, 0) scale(1.06);
-  }
-}
-
 /* ------------------------------------------------------------------ */
 /* Components                                                          */
 /* ------------------------------------------------------------------ */
 @layer components {
-  /* Liquid glass panel: frosted fill + bright top edge + light-catching rim + soft sheen */
-  .card,
+  /* พื้นผิวเรียบแบบ Apple: การ์ดสีพื้น ไม่มีเงาหนา */
+  .card {
+    position: relative;
+    isolation: isolate;
+    border-radius: var(--radius-card);
+    background: var(--color-surface);
+    box-shadow: 0 0 0 1px var(--card-ring);
+  }
+  /* กระจกฝ้า: แถบเมนู หน้าต่าง ป๊อปอัป */
   .glass {
     position: relative;
     isolation: isolate;
@@ -201,55 +201,17 @@ textarea {
     -webkit-backdrop-filter: var(--glass-blur);
     backdrop-filter: var(--glass-blur);
     box-shadow:
-      inset 0 1px 0 0 var(--glass-edge),
       inset 0 0 0 1px var(--glass-ring),
       var(--glass-shadow);
-  }
-  .card {
-    border-radius: var(--radius-card);
-  }
-  .card::before,
-  .glass::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    border-radius: inherit;
-    padding: 1px;
-    background: linear-gradient(
-      150deg,
-      var(--glass-edge) 0%,
-      transparent 28%,
-      transparent 70%,
-      color-mix(in srgb, var(--glass-edge) 60%, transparent) 100%
-    );
-    -webkit-mask:
-      linear-gradient(#000 0 0) content-box,
-      linear-gradient(#000 0 0);
-    -webkit-mask-composite: xor;
-    mask-composite: exclude;
-    pointer-events: none;
-  }
-  .card::after,
-  .glass::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-    z-index: -1;
-    border-radius: inherit;
-    background: radial-gradient(120% 70% at 10% -10%, var(--glass-sheen), transparent 55%);
-    pointer-events: none;
   }
   .glass-strong {
     background: var(--glass-bg-strong);
   }
 
-  /* inner tile on top of a glass card */
+  /* ช่องย่อยภายในการ์ด */
   .well {
-    border-radius: 18px;
-    background: color-mix(in srgb, var(--glass-bg-strong) 55%, transparent);
-    box-shadow:
-      inset 0 1px 0 0 color-mix(in srgb, var(--glass-edge) 70%, transparent),
-      inset 0 0 0 1px var(--color-line);
+    border-radius: 16px;
+    background: var(--well);
   }
 
   .icon-chip {
@@ -258,43 +220,36 @@ textarea {
     justify-content: center;
     width: 34px;
     height: 34px;
-    border-radius: 12px;
-    background: color-mix(in srgb, var(--glass-bg-strong) 80%, transparent);
-    box-shadow:
-      inset 0 1px 0 0 var(--glass-edge),
-      inset 0 0 0 1px var(--color-line),
-      0 4px 12px -6px rgb(20 30 60 / 0.25);
+    border-radius: 10px;
+    background: var(--well);
     color: var(--color-ink-2);
   }
 
+  /* ปุ่มหลัก: ฟ้าแบบ Apple */
   .btn-ink {
-    background: linear-gradient(180deg, color-mix(in srgb, var(--color-ink) 82%, #fff) 0%, var(--color-ink) 55%);
-    color: var(--color-on-ink);
-    box-shadow:
-      inset 0 1px 0 0 rgb(255 255 255 / 0.28),
-      inset 0 0 0 1px rgb(0 0 0 / 0.08),
-      0 8px 20px -10px rgb(0 0 0 / 0.55);
+    background: #0071e3;
+    color: #fff;
   }
+  .btn-ink:hover {
+    background: #0077ed;
+  }
+  /* ปุ่มรอง: เทาอ่อน */
   .btn-glass {
-    background: color-mix(in srgb, var(--glass-bg-strong) 85%, transparent);
-    -webkit-backdrop-filter: var(--glass-blur);
-    backdrop-filter: var(--glass-blur);
+    background: var(--btn-2);
     color: var(--color-ink);
-    box-shadow:
-      inset 0 1px 0 0 var(--glass-edge),
-      inset 0 0 0 1px var(--color-line),
-      0 6px 16px -10px rgb(20 30 60 / 0.35);
+  }
+  .btn-glass:hover {
+    background: var(--btn-2-hover);
   }
   .seg-track {
-    background: color-mix(in srgb, var(--color-fill) 80%, transparent);
-    box-shadow: inset 0 1px 2px rgb(0 0 0 / 0.06);
+    background: var(--color-fill-soft);
   }
   .seg-thumb {
-    background: var(--glass-bg-strong);
+    background: var(--color-surface);
     box-shadow:
-      inset 0 1px 0 0 var(--glass-edge),
-      inset 0 0 0 1px var(--color-line),
-      0 3px 10px -2px rgb(20 30 60 / 0.22);
+      0 0 0 0.5px rgb(0 0 0 / 0.04),
+      0 3px 8px rgb(0 0 0 / 0.12),
+      0 3px 1px rgb(0 0 0 / 0.04);
   }
 
   .eyebrow {
@@ -307,8 +262,8 @@ textarea {
   .display {
     font-family: var(--font-display);
     font-weight: 600;
-    letter-spacing: -0.025em;
-    line-height: 1.08;
+    letter-spacing: -0.02em;
+    line-height: 1.1;
   }
 
   .num {
@@ -326,30 +281,27 @@ textarea {
     text-underline-offset: 3px;
   }
 
-
   .field {
     width: 100%;
-    border-radius: 14px;
-    background: color-mix(in srgb, var(--glass-bg-strong) 70%, transparent);
-    border: 1px solid var(--color-line);
+    border-radius: 12px;
+    background: var(--color-surface);
+    border: 1px solid var(--color-line-strong);
     padding: 10px 14px;
     font-size: 15px;
     color: var(--color-ink);
     transition:
       border-color 0.2s var(--ease-apple),
-      background 0.2s var(--ease-apple);
+      box-shadow 0.2s var(--ease-apple);
   }
   .field::placeholder {
     color: var(--color-ink-3);
   }
   .field:focus {
     outline: none;
-    background: var(--color-surface);
     border-color: var(--color-accent);
-    box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-accent) 15%, transparent);
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-accent) 18%, transparent);
   }
 }
-
 /* ------------------------------------------------------------------ */
 /* Motion                                                              */
 /* ------------------------------------------------------------------ */
@@ -479,7 +431,6 @@ textarea {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .ambient,
   .animate-rise,
   .animate-fade,
   .animate-sheet,
@@ -516,7 +467,9 @@ textarea {
   display: none;
 }
 @media print {
-  :root {
+  :root,
+  :root[data-theme='dark'],
+  :root:not([data-theme='light']) {
     --color-surface: #ffffff;
     --color-ink: #000000;
     --color-ink-2: #333333;
@@ -537,16 +490,14 @@ textarea {
   .print-only {
     display: block !important;
   }
-  .ambient {
-    display: none;
-  }
 }
 
 /* ------------------------------------------------------------------ */
 /* Apple-style home                                                    */
 /* ------------------------------------------------------------------ */
 .apple-nav {
-  background: rgb(22 22 23 / 0.8);
+  background: var(--nav-bg);
+  color: var(--nav-ink);
   -webkit-backdrop-filter: saturate(180%) blur(20px);
   backdrop-filter: saturate(180%) blur(20px);
 }
@@ -576,15 +527,15 @@ textarea {
   background: #0077ed;
 }
 .apple-btn-outline {
-  color: #2997ff;
-  border: 1px solid #2997ff;
+  color: var(--color-accent);
+  border: 1px solid var(--color-accent);
 }
 .apple-btn-outline:hover {
-  background: #2997ff;
+  background: var(--color-accent);
   color: #fff;
 }
 .apple-link {
-  color: #2997ff;
+  color: var(--color-link);
 }
 .apple-link:hover {
   text-decoration: underline;

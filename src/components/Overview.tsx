@@ -13,7 +13,7 @@ import { DutyCard } from './DutyCard';
 import { enterFullscreen } from './WallView';
 import { bedAcuitySlices, bedStatusSlices } from '../lib/breakdowns';
 import { CHART_TYPES, DonutChart, SeriesChart, type ChartType } from './charts';
-import { Button, cx, Dot, Empty, SectionHeader, Segmented } from './ui';
+import { Button, cx, Dot, Empty, PageHero, SectionHeader, Segmented } from './ui';
 import { AcuityBar, BedStrip, Delta, Ring, Sparkline } from './viz';
 
 export function Overview({
@@ -76,40 +76,41 @@ export function Overview({
   return (
     <div className="space-y-14 sm:space-y-16">
       {/* Hero */}
-      <section className="animate-rise pt-8 sm:pt-12">
-        <div className="flex flex-wrap items-end justify-between gap-6">
-          <div>
-            <p className="glass inline-flex items-center gap-2 rounded-full px-3.5 py-1.5 text-[12px] text-ink-2">
+      <section>
+        <PageHero
+          eyebrow={
+            <span className="inline-flex items-center gap-2">
               <span className="relative inline-flex">
                 <Dot className="bg-good" />
                 <span className="absolute inset-0 animate-ping rounded-full bg-good/40 [animation-duration:2.4s]" />
               </span>
-              {fmtDateLong(today)} · <span className="num text-ink">{clock}</span> น.
-            </p>
-            <h1 className="display mt-4 text-[40px] sm:text-[58px]">{UNIT}</h1>
-            <p className="mt-2 text-[17px] text-ink-2 sm:text-[19px]">
-              {HOSPITAL} · {total} เตียง · ผู้ป่วย {occ.length} ราย
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Button
-              variant="secondary"
-              size="lg"
-              onClick={() => {
-                void enterFullscreen();
-                onView('wall');
-              }}
-            >
-              <Maximize className="size-4" strokeWidth={1.8} />
-              โหมดเต็มจอ
-            </Button>
-            {isStaff && (
-              <Button variant="primary" size="lg" onClick={onAdmit} disabled={free + cleaning === 0}>
-                รับผู้ป่วยใหม่
+              {fmtDateLong(today)} · <span className="num">{clock}</span> น.
+            </span>
+          }
+          tone="var(--color-ink-2)"
+          title={UNIT}
+          subtitle={`${HOSPITAL} · ${total} เตียง · ผู้ป่วย ${occ.length} ราย`}
+          actions={
+            <>
+              {isStaff && (
+                <Button variant="primary" size="lg" onClick={onAdmit} disabled={free + cleaning === 0}>
+                  รับผู้ป่วยใหม่
+                </Button>
+              )}
+              <Button
+                variant="secondary"
+                size="lg"
+                onClick={() => {
+                  void enterFullscreen();
+                  onView('wall');
+                }}
+              >
+                <Maximize className="size-4" strokeWidth={1.8} />
+                โหมดเต็มจอ
               </Button>
-            )}
-          </div>
-        </div>
+            </>
+          }
+        />
 
         {/* Key figures */}
         <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
