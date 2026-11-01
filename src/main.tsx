@@ -12,6 +12,9 @@ import '@fontsource/noto-sans-thai/thai-600.css';
 import '@fontsource/noto-sans-thai/thai-700.css';
 import './index.css';
 
+// เว็บจัดการตำแหน่งเลื่อนเอง (เปิดหน้าใหม่อยู่บนสุดเสมอ) ไม่ให้เบราว์เซอร์คืนตำแหน่งเดิม
+if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <App />

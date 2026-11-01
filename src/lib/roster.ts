@@ -178,3 +178,21 @@ export const realName = (name: string) => {
 
 /** ชื่อที่ใช้แสดงแบบสั้น: ชื่อจริง (ไม่มีคำนำหน้า) — ชื่อเล่นเป็นข้อมูลรอง */
 export const shortName = (s: { name: string; nickname?: string } | null, fallback = '') => firstName(s ? s.name : fallback);
+
+const pad2 = (n: number) => String(n).padStart(2, '0');
+
+/** ช่วงเวลาของเวร (8 ชั่วโมง) ที่ครอบคลุมเวลา now · end เป็นเวลาสิ้นสุด (ไม่รวม) */
+export const shiftWindow = (now = new Date()) => {
+  const def = SHIFT_BY_KEY[shiftAt(now)];
+  const date = `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())}`;
+  const endAt = new Date(now.getFullYear(), now.getMonth(), now.getDate(), def.end, 0, 0);
+  return {
+    def,
+    date,
+    start: `${date}T${pad2(def.start)}:00`,
+    end: `${date}T${pad2(def.end)}:00`,
+    endAt,
+    /** ใช้กันบันทึกซ้ำ เช่น 2026-11-01-M */
+    key: `${date}-${def.key}`,
+  };
+};

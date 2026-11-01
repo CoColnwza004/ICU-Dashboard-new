@@ -74,7 +74,7 @@ export const useHashView = () => {
       else history.pushState(null, '', window.location.pathname + window.location.search);
     }
     setState({ view: v, intent });
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    // เลื่อนขึ้นบนสุดทำใน App หลังหน้าใหม่แสดงผลแล้ว (ดู useLayoutEffect ใน App)
   };
   /** ใช้ intent แล้ว — ลบออกจาก URL (กด back จะไม่เปิดฟอร์มซ้ำ) */
   const clearIntent = () => {

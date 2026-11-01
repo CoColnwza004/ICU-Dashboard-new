@@ -1,4 +1,4 @@
-import { ArrowUpRight, BedDouble, ChevronRight, Maximize, Siren, Users, Wind } from 'lucide-react';
+import { ArrowUpRight, BedDouble, ChevronRight, Maximize, Siren, Users, Wind, FileDown } from 'lucide-react';
 import { useMemo, useState, type ReactNode } from 'react';
 import { DEVICES, EVENT_META, HOSPITAL, INDICATORS, STATUS_META, UNIT } from '../lib/constants';
 import { fmtDateLong, fmtDateShort, fmtDateTime, fmtDayMonth, shiftDate, todayKey } from '../lib/date';
@@ -11,6 +11,7 @@ import type { DailyKey } from '../types';
 import { BedCard } from './BedCard';
 import { DutyCard } from './DutyCard';
 import { FlowTiles } from './Flow';
+import { ShiftReportDialog } from './ShiftReport';
 import { enterFullscreen } from '../lib/fullscreen';
 import { bedAcuitySlices, bedStatusSlices } from '../lib/breakdowns';
 import { CHART_TYPES, DonutChart, SeriesChart, type ChartType } from './charts';
@@ -71,6 +72,7 @@ export function Overview({
   );
 
   const [chartType, setChartType] = useState<ChartType>('auto');
+  const [report, setReport] = useState(false);
 
   return (
     <div className="space-y-14 sm:space-y-16">
@@ -109,6 +111,10 @@ export function Overview({
               >
                 <Maximize className="size-4" strokeWidth={1.8} />
                 โหมดเต็มจอ
+              </Button>
+              <Button variant="secondary" size="lg" onClick={() => setReport(true)}>
+                <FileDown className="size-4" strokeWidth={1.8} />
+                รายงานเวร
               </Button>
             </>
           }
@@ -403,6 +409,7 @@ export function Overview({
           )}
         </div>
       </section>}
+      <ShiftReportDialog open={report} onClose={() => setReport(false)} />
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useState, type ReactNode } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useState, type ReactNode } from 'react';
 import { HomePage } from './components/HomePage';
 import { MenuSheet } from './components/Menu';
 import type { PrintJob } from './components/PrintReport';
@@ -106,6 +106,11 @@ export default function App() {
       setSettings(false);
     }
   }, [isStaff]);
+
+  // เปลี่ยนหน้า → ขึ้นบนสุดทันที (ไม่ใช้ smooth: Safari จะยกเลิกการเลื่อนเมื่อความสูงหน้าเปลี่ยน แล้วค้างอยู่ด้านล่าง)
+  useLayoutEffect(() => {
+    window.scrollTo(0, 0);
+  }, [view]);
 
   // ธีม: หน้าแรกพื้นดำเสมอ · หน้าอื่นตามที่เลือก (ตามเครื่อง / สว่าง / มืด)
   const apple = view === 'home';

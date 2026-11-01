@@ -3,7 +3,7 @@
  * แปลงหน้ารายงานเป็นภาพความละเอียดสูง แล้วแบ่งหน้า A4 ตรงรอยต่อของแถว/หัวข้อ ไม่ให้ตัดกลางบรรทัด
  * โหลดไลบรารีเฉพาะตอนกดปุ่ม เพื่อไม่ให้หน้าเว็บช้าลง
  */
-export async function exportPdf(node: HTMLElement, filename: string, landscape = false) {
+export async function exportPdf(node: HTMLElement, filename: string, landscape = false, opts: { onePage?: boolean } = {}) {
   const [{ toCanvas }, { jsPDF }] = await Promise.all([import('html-to-image'), import('jspdf')]);
   await document.fonts.ready;
 
@@ -33,6 +33,14 @@ export async function exportPdf(node: HTMLElement, filename: string, landscape =
 
   let y = 0;
   let pages = 0;
+  // รายงานหน้าเดียว (เช่น รายงานประจำเวร): ย่อให้พอดีกระดาษ 1 แผ่นเสมอ
+  if (opts.onePage) {
+    const wMm = Math.min(contentW, (contentH * node.offsetWidth) / total);
+    const hMm = (total / node.offsetWidth) * wMm;
+    pdf.addImage(canvas.toDataURL('image/jpeg', 0.92), 'JPEG', margin + (contentW - wMm) / 2, margin, wMm, hMm);
+    pages = 1;
+    y = total;
+  }
   while (y < total - 2) {
     let end = Math.min(total, y + pagePx);
     if (end < total) {
@@ -60,6 +68,22 @@ export async function exportPdf(node: HTMLElement, filename: string, landscape =
     pdf.text(`${i} / ${pages}`, pageW - margin, pageH - margin + 2, { align: 'right' });
   }
   const url = URL.createObjectURL(pdf.output('blob'));
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 30_000);
+}
+
+/** บันทึกเป็นรูปภาพ PNG (ความละเอียด 2 เท่า) */
+export async function exportPng(node: HTMLElement, filename: string) {
+  const { toBlob } = await import('html-to-image');
+  await document.fonts.ready;
+  const blob = await toBlob(node, { pixelRatio: 2, backgroundColor: '#ffffff', cacheBust: true });
+  if (!blob) throw new Error('สร้างรูปภาพไม่สำเร็จ');
+  const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
   link.download = filename;

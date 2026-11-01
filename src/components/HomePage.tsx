@@ -1,5 +1,5 @@
 import { ChevronDown, ChevronRight } from 'lucide-react';
-import { useState, type CSSProperties, type ElementType, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type ElementType, type ReactNode } from 'react';
 import type { Bed, News } from '../types';
 import { CPG } from '../lib/docs';
 import { imageUrl, isNewNews, kpiPoint, shiftMonth } from '../lib/content';
@@ -129,10 +129,12 @@ function Hero({ onGo, ribbon }: { onGo: (v: View) => void; ribbon: boolean }) {
         className="relative flex flex-col items-center justify-center overflow-hidden px-4 pt-10 pb-40 text-center md:pb-28"
         style={{ minHeight: `calc(100svh - 48px${ribbon ? ' - 46px' : ''})` }}
       >
-        <div
-          aria-hidden
-          className="pointer-events-none absolute top-[10%] left-1/2 -z-0 h-[420px] w-[min(900px,120vw)] -translate-x-1/2 bg-[radial-gradient(closest-side,rgb(10_132_255/0.2),transparent)]"
-        />
+        {/* แสงนุ่ม ๆ ลอยช้า ๆ ด้านหลังหัวข้อ */}
+        <div aria-hidden className="aurora">
+          <span className="aurora-blob a" />
+          <span className="aurora-blob b" />
+          <span className="aurora-blob c" />
+        </div>
         <p className="apple-fade-in relative text-[14px] text-[#86868b] sm:text-[17px]">
           {fmtDateLong(todayKey())} · {time} น.
         </p>
@@ -147,6 +149,8 @@ function Hero({ onGo, ribbon }: { onGo: (v: View) => void; ribbon: boolean }) {
           </Cta>
           <Cta onClick={() => onGo('wall')}>เปิดโหมดเต็มจอ</Cta>
         </div>
+        <LivePills onGo={onGo} />
+        <EcgLine />
         <button
           type="button"
           onClick={scrollDown}
@@ -183,6 +187,121 @@ function Hero({ onGo, ribbon }: { onGo: (v: View) => void; ribbon: boolean }) {
       </div>
       </Reveal>
     </>
+  );
+}
+
+/** เส้นคลื่นหัวใจแบบจอมอนิเตอร์ — แสงวิ่งจากซ้ายไปขวา */
+const ecgPath = (() => {
+  const W = 300;
+  const y = 60;
+  let d = `M0,${y}`;
+  for (let i = 0; i < 4; i++) {
+    const x = i * W;
+    d +=
+      `L${x + 0.3 * W},${y}` +
+      `Q${x + 0.34 * W},${y - 9} ${x + 0.38 * W},${y}` +
+      `L${x + 0.45 * W},${y}L${x + 0.475 * W},${y + 8}L${x + 0.5 * W},${y - 48}L${x + 0.53 * W},${y + 24}L${x + 0.555 * W},${y}` +
+      `L${x + 0.63 * W},${y}Q${x + 0.7 * W},${y - 18} ${x + 0.77 * W},${y}L${x + W},${y}`;
+  }
+  return d;
+})();
+
+function EcgLine() {
+  return (
+    <svg aria-hidden viewBox="0 0 1200 120" preserveAspectRatio="none" className="relative mt-10 h-[72px] w-[min(1100px,100%)] sm:mt-12 sm:h-[96px]">
+      <defs>
+        <linearGradient id="ecg-grad" x1="0" y1="0" x2="1200" y2="0" gradientUnits="userSpaceOnUse">
+          <stop offset="0" stopColor="#2997ff" />
+          <stop offset="0.5" stopColor="#bf5af2" />
+          <stop offset="1" stopColor="#ff375f" />
+        </linearGradient>
+        <linearGradient id="ecg-fade" x1="0" y1="0" x2="1200" y2="0" gradientUnits="userSpaceOnUse">
+          <stop offset="0" stopColor="#fff" stopOpacity="0" />
+          <stop offset="0.15" stopColor="#fff" stopOpacity="1" />
+          <stop offset="0.85" stopColor="#fff" stopOpacity="1" />
+          <stop offset="1" stopColor="#fff" stopOpacity="0" />
+        </linearGradient>
+        <mask id="ecg-mask">
+          <rect width="1200" height="120" fill="url(#ecg-fade)" />
+        </mask>
+      </defs>
+      <g mask="url(#ecg-mask)" fill="none" strokeLinejoin="round" strokeLinecap="round">
+        <path d={ecgPath} stroke="rgb(255 255 255 / 0.1)" strokeWidth={1.4} vectorEffect="non-scaling-stroke" />
+        <path d={ecgPath} pathLength={1} className="ecg-trace" stroke="url(#ecg-grad)" strokeWidth={7} opacity={0.28} vectorEffect="non-scaling-stroke" />
+        <path d={ecgPath} pathLength={1} className="ecg-trace" stroke="url(#ecg-grad)" strokeWidth={2.2} vectorEffect="non-scaling-stroke" />
+      </g>
+    </svg>
+  );
+}
+
+/** ตัวเลขนับขึ้นเมื่อเปิดหน้า (เคารพ “ลดการเคลื่อนไหว”) */
+function useCountUp(target: number, ms = 1100) {
+  const [v, setV] = useState(0);
+  const from = useRef(0);
+  useEffect(() => {
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reduce) {
+      setV(target);
+      from.current = target;
+      return;
+    }
+    const start = performance.now();
+    const a = from.current;
+    let raf = 0;
+    const step = (t: number) => {
+      const p = Math.min(1, (t - start) / ms);
+      const e = 1 - Math.pow(1 - p, 3);
+      setV(Math.round(a + (target - a) * e));
+      if (p < 1) raf = requestAnimationFrame(step);
+      else from.current = target;
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [target, ms]);
+  return v;
+}
+
+function CountUp({ value }: { value: number }) {
+  return <>{useCountUp(value)}</>;
+}
+
+/** แถบสถานะสดใต้ปุ่ม */
+function LivePills({ onGo }: { onGo: (v: View) => void }) {
+  const { data } = useStore();
+  const beds = data.beds;
+  const occ = beds.filter((b) => b.status === 'occupied');
+  const free = beds.filter((b) => b.status === 'available').length;
+  const vent = occ.filter((b) => b.onVentilator).length;
+  const duty = currentDuty(data, new Date());
+  const items: { label: string; value: ReactNode; tone: string }[] = [
+    { label: 'ผู้ป่วย', value: <><CountUp value={occ.length} />/{beds.length}</>, tone: '#f5f5f7' },
+    { label: 'เตียงว่าง', value: <CountUp value={free} />, tone: '#30d158' },
+    { label: 'Ventilator', value: <CountUp value={vent} />, tone: '#64d2ff' },
+    ...(duty.team.length ? [{ label: `ทีม${SHIFT_BY_KEY[duty.shift].label}`, value: <><CountUp value={duty.team.length} /> คน</>, tone: '#f5f5f7' }] : []),
+  ];
+  return (
+    <button
+      type="button"
+      onClick={() => onGo('overview')}
+      className="apple-fade-in relative mt-9 inline-flex max-w-full flex-wrap items-center justify-center gap-x-5 gap-y-2 rounded-[22px] bg-white/[0.06] px-5 py-3 text-[14px] shadow-[inset_0_0_0_1px_rgb(255_255_255/0.08)] backdrop-blur transition-colors hover:bg-white/[0.09] sm:rounded-full sm:text-[15px]"
+      aria-label="สถานะ ICU ขณะนี้ — แตะเพื่อดูแดชบอร์ด"
+    >
+      <span className="inline-flex items-center gap-2 text-[#a1a1a6]">
+        <span className="relative inline-flex size-2">
+          <span className="absolute inset-0 animate-ping rounded-full bg-[#30d158]/60 [animation-duration:2.4s]" />
+          <span className="relative size-2 rounded-full bg-[#30d158]" />
+        </span>
+        สด
+      </span>
+      {items.map((it) => (
+        <span key={it.label} className="inline-flex items-baseline gap-1.5">
+          <span className="num text-[17px] font-semibold sm:text-[19px]" style={{ color: it.tone }}>
+            {it.value}
+          </span>
+          <span className="text-[#a1a1a6]">{it.label}</span>
+        </span>
+      ))}
+    </button>
   );
 }
 

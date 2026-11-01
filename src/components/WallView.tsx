@@ -1,4 +1,4 @@
-import { Maximize, Minimize, X } from 'lucide-react';
+import { FileDown, Maximize, Minimize, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { Bed } from '../types';
 import { ACUITY_META, DEVICES, EVENT_META, HOSPITAL, STATUS_META, UNIT } from '../lib/constants';
@@ -8,6 +8,7 @@ import { countsFromBeds, emptyDaily, findDaily, occupied } from '../lib/logic';
 import { fmtStat, STAT_DEFS, statsFor } from '../lib/stats';
 import { useStore } from '../lib/store';
 import { DutyCard } from './DutyCard';
+import { reportFilename, ShiftReportDialog, ShiftReportExporter, useAutoShiftReport } from './ShiftReport';
 import { FlowTiles } from './Flow';
 import { SyncBadge } from './TopBar';
 import { hasRoster } from '../lib/roster';
@@ -61,7 +62,9 @@ const useIdle = (ms = 3500) => {
 };
 
 export function WallView({ onExit }: { onExit: () => void }) {
-  const { data } = useStore();
+  const { data, toast } = useStore();
+  const [report, setReport] = useState(false);
+  const [autoJob, clearAutoJob] = useAutoShiftReport();
   const idle = useIdle();
   const [isFs, setIsFs] = useState(() => !!fsElement());
   const [vmin, setVmin] = useState(() => Math.min(window.innerWidth, window.innerHeight));
@@ -151,6 +154,15 @@ export function WallView({ onExit }: { onExit: () => void }) {
             <Clock seconds secondsClassName="ml-1 text-[0.42em] text-ink-3" />
           </p>
           <div className={cx('flex items-center gap-1 transition-opacity duration-500', idle ? 'opacity-25' : 'opacity-100')}>
+            <button
+              type="button"
+              onClick={() => setReport(true)}
+              aria-label="ดาวน์โหลดรายงานประจำเวร (รูปภาพ / PDF)"
+              title="ดาวน์โหลดรายงานประจำเวร (รูปภาพ / PDF)"
+              className={cx(ctrl, 'btn-glass')}
+            >
+              <FileDown className="size-[44%]" strokeWidth={1.9} />
+            </button>
             {supported && (
               <button
                 type="button"
@@ -277,6 +289,19 @@ export function WallView({ onExit }: { onExit: () => void }) {
           )}
         </div>
       </section>
+
+      <ShiftReportDialog open={report} onClose={() => setReport(false)} onWall />
+      {autoJob && (
+        <ShiftReportExporter
+          format={autoJob.format}
+          at={autoJob.at}
+          onDone={(ok, err) => {
+            clearAutoJob();
+            if (ok) toast('บันทึกรายงานเวรอัตโนมัติแล้ว', 'default', reportFilename(autoJob.at, autoJob.format));
+            else toast('บันทึกรายงานเวรอัตโนมัติไม่สำเร็จ', 'error', err);
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -722,3 +722,84 @@ textarea {
     animation: none;
   }
 }
+
+/* ------------------------------------------------------------------ */
+/* หน้าแรก: แสงลอย (aurora) · เส้นคลื่นหัวใจ                               */
+/* ------------------------------------------------------------------ */
+.aurora {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.aurora-blob {
+  position: absolute;
+  left: 50%;
+  top: 38%;
+  width: min(1000px, 140vw);
+  aspect-ratio: 1;
+  border-radius: 9999px;
+  will-change: transform;
+}
+.aurora-blob.a {
+  background: radial-gradient(closest-side, rgb(41 151 255 / 0.26), transparent 72%);
+  animation: aurora-a 20s ease-in-out infinite alternate;
+}
+.aurora-blob.b {
+  background: radial-gradient(closest-side, rgb(191 90 242 / 0.2), transparent 72%);
+  animation: aurora-b 26s ease-in-out infinite alternate;
+}
+.aurora-blob.c {
+  width: min(640px, 100vw);
+  background: radial-gradient(closest-side, rgb(255 55 95 / 0.12), transparent 72%);
+  animation: aurora-c 30s ease-in-out infinite alternate;
+}
+@keyframes aurora-a {
+  from {
+    transform: translate3d(-75%, -55%, 0) scale(0.9);
+  }
+  to {
+    transform: translate3d(-35%, -45%, 0) scale(1.1);
+  }
+}
+@keyframes aurora-b {
+  from {
+    transform: translate3d(-25%, -60%, 0) scale(1.05);
+  }
+  to {
+    transform: translate3d(-65%, -40%, 0) scale(0.9);
+  }
+}
+@keyframes aurora-c {
+  from {
+    transform: translate3d(-20%, -20%, 0);
+  }
+  to {
+    transform: translate3d(-80%, -70%, 0);
+  }
+}
+/* แสงวิ่งบนเส้นคลื่นหัวใจ: ขีดยาว 0.18 ของเส้น วิ่งจากซ้ายสุดออกขวาสุด */
+.ecg-trace {
+  stroke-dasharray: 0.18 1.2;
+  stroke-dashoffset: 0.18;
+  animation: ecg-sweep 3.6s linear infinite;
+}
+@keyframes ecg-sweep {
+  from {
+    stroke-dashoffset: 0.18;
+  }
+  to {
+    stroke-dashoffset: -1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .aurora-blob {
+    animation: none;
+    transform: translate(-50%, -50%);
+  }
+  .ecg-trace {
+    animation: none;
+    stroke-dasharray: none;
+    opacity: 0.6;
+  }
+}
