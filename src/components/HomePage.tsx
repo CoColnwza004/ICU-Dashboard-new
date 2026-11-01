@@ -60,25 +60,7 @@ function Cta({ children, onClick, primary }: { children: ReactNode; onClick: () 
 }
 
 /** รูป 3 มิติ (Microsoft Fluent Emoji 3D · MIT) อยู่ใน public/3d */
-export type Img3DName =
-  | 'hospital'
-  | 'bed'
-  | 'news'
-  | 'calendar'
-  | 'health-worker'
-  | 'target'
-  | 'books'
-  | 'stethoscope'
-  | 'download'
-  | 'memo'
-  | 'display'
-  | 'lock'
-  | 'chart'
-  | 'heart'
-  | 'megaphone'
-  | 'ambulance'
-  | 'house'
-  | 'trend';
+export type Img3DName = 'news' | 'calendar' | 'target' | 'books' | 'stethoscope' | 'download' | 'memo' | 'display' | 'megaphone';
 
 export function Img3D({ name, size, className, eager }: { name: Img3DName; size: number; className?: string; eager?: boolean }) {
   return (
@@ -151,12 +133,7 @@ function Hero({ onGo, ribbon }: { onGo: (v: View) => void; ribbon: boolean }) {
           aria-hidden
           className="pointer-events-none absolute top-[10%] left-1/2 -z-0 h-[420px] w-[min(900px,120vw)] -translate-x-1/2 bg-[radial-gradient(closest-side,rgb(10_132_255/0.2),transparent)]"
         />
-        <div className="apple-fade-in relative flex items-end justify-center gap-2 sm:gap-6">
-          <Img3D name="heart" size={84} className="float-3d-slow mb-3 sm:!size-[112px]" eager />
-          <Img3D name="hospital" size={132} className="float-3d sm:!size-[176px]" eager />
-          <Img3D name="ambulance" size={84} className="float-3d-slow mb-3 sm:!size-[112px]" eager />
-        </div>
-        <p className="apple-fade-in relative mt-8 text-[14px] text-[#86868b] sm:text-[17px]">
+        <p className="apple-fade-in relative text-[14px] text-[#86868b] sm:text-[17px]">
           {fmtDateLong(todayKey())} · {time} น.
         </p>
         <h1 className="apple-fade-in apple-headline relative mt-2 text-[44px] sm:text-[64px] lg:text-[80px]">ICU Smart Center</h1>
@@ -375,16 +352,13 @@ function TileGrid({ onGo }: { onGo: (v: View) => void }) {
         visual={
           leader ? (
             <div className="text-center">
-              <div className="relative mx-auto w-fit">
-                <Avatar staff={leader} size={112} className="shadow-[0_0_60px_-10px_#bf5af2]" />
-                <Img3D name="health-worker" size={64} className="pop-3d absolute -right-10 -bottom-2" />
-              </div>
+              <Avatar staff={leader} size={112} className="mx-auto shadow-[0_0_60px_-10px_#bf5af2]" />
               <p className="mt-4 text-[19px] font-semibold text-[#f5f5f7]">{leader.name}</p>
               <p className="text-[14px] text-[#a1a1a6]">{leader.position || leader.group}</p>
               {staff.length > 1 && <p className="mt-1 text-[13px] text-[#86868b]">และทีมอีก {staff.length - 1} คน</p>}
             </div>
           ) : (
-            <Big3D name="health-worker" />
+            <p className="text-[17px] text-[#a1a1a6]">ยังไม่มีรายชื่อบุคลากร</p>
           )
         }
       />
