@@ -1,14 +1,5 @@
-import {
-  BookOpen,
-  ChevronRight,
-  ClipboardList,
-  Download,
-  Maximize,
-  Megaphone,
-  Stethoscope,
-  type LucideIcon,
-} from 'lucide-react';
-import { useState, type ReactNode } from 'react';
+import { ChevronDown, ChevronRight } from 'lucide-react';
+import { useState, type CSSProperties, type ElementType, type ReactNode } from 'react';
 import type { Bed, News } from '../types';
 import { CPG } from '../lib/docs';
 import { imageUrl, isNewNews, kpiPoint, shiftMonth } from '../lib/content';
@@ -18,6 +9,8 @@ import type { View } from '../lib/hooks';
 import { useNow } from '../lib/hooks';
 import { currentDuty, realName, SHIFT_BY_KEY } from '../lib/roster';
 import { useStore } from '../lib/store';
+import { useReveal } from '../lib/reveal';
+import { FLOW_ITEMS, useFlow } from './Flow';
 import { Avatar } from './Avatar';
 import { CategoryPill, NewsReader } from './NewsPage';
 import { cx } from './ui';
@@ -46,7 +39,7 @@ export function HomePage({ onGo }: { onGo: (v: View) => void }) {
         </button>
       )}
 
-      <Hero onGo={onGo} />
+      <Hero onGo={onGo} ribbon={!!urgent} />
       {featured && <NewsHero n={featured} onRead={() => setReading(featured)} onGo={onGo} />}
       <TileGrid onGo={onGo} />
       <NewsShelf news={news.slice(0, 8)} onRead={setReading} onGo={onGo} />
@@ -66,7 +59,67 @@ function Cta({ children, onClick, primary }: { children: ReactNode; onClick: () 
   );
 }
 
-function Hero({ onGo }: { onGo: (v: View) => void }) {
+/** รูป 3 มิติ (Microsoft Fluent Emoji 3D · MIT) อยู่ใน public/3d */
+export type Img3DName =
+  | 'hospital'
+  | 'bed'
+  | 'news'
+  | 'calendar'
+  | 'health-worker'
+  | 'target'
+  | 'books'
+  | 'stethoscope'
+  | 'download'
+  | 'memo'
+  | 'display'
+  | 'lock'
+  | 'chart'
+  | 'heart'
+  | 'megaphone'
+  | 'ambulance'
+  | 'house'
+  | 'trend';
+
+export function Img3D({ name, size, className, eager }: { name: Img3DName; size: number; className?: string; eager?: boolean }) {
+  return (
+    <img
+      src={`${import.meta.env.BASE_URL}3d/${name}.webp`}
+      alt=""
+      aria-hidden
+      width={size}
+      height={size}
+      loading={eager ? 'eager' : 'lazy'}
+      decoding="async"
+      draggable={false}
+      className={cx('img-3d', className)}
+      style={{ width: size, height: size }}
+    />
+  );
+}
+
+/** ส่วนที่ค่อย ๆ ปรากฏเมื่อเลื่อนมาถึง */
+function Reveal({
+  as: Tag = 'div',
+  delay = 0,
+  className,
+  children,
+  ...rest
+}: {
+  as?: ElementType;
+  delay?: number;
+  className?: string;
+  children: ReactNode;
+  id?: string;
+}) {
+  const ref = useReveal<HTMLElement>();
+  return (
+    <Tag ref={ref} className={cx('reveal', className)} style={{ '--delay': `${delay}ms` } as CSSProperties} {...rest}>
+      {children}
+    </Tag>
+  );
+}
+
+function Hero({ onGo, ribbon }: { onGo: (v: View) => void; ribbon: boolean }) {
   const { data } = useStore();
   const now = useNow(30_000);
   const beds = data.beds;
@@ -76,23 +129,64 @@ function Hero({ onGo }: { onGo: (v: View) => void }) {
   const vent = occ.filter((b) => b.onVentilator).length;
   const time = new Date(now).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
 
-  return (
-    <section className="apple-fade-in px-4 pt-14 pb-16 text-center sm:pt-20 sm:pb-24">
-      <p className="text-[14px] text-[#86868b] sm:text-[17px]">
-        {fmtDateLong(todayKey())} · {time} น.
-      </p>
-      <h1 className="apple-headline mt-2 text-[44px] sm:text-[64px] lg:text-[80px]">ICU Smart Center</h1>
-      <p className="mt-2 text-[21px] leading-snug text-[#f5f5f7] sm:text-[28px]">ข้อมูลหอผู้ป่วยวิกฤต ครบในที่เดียว</p>
-      <p className="mt-1 text-[15px] text-[#86868b] sm:text-[17px]">{HOSPITAL}</p>
-      <div className="mt-6 flex flex-wrap justify-center gap-3 sm:gap-4">
-        <Cta primary onClick={() => onGo('overview')}>
-          ดูแดชบอร์ด
-        </Cta>
-        <Cta onClick={() => onGo('wall')}>เปิดโหมดเต็มจอ</Cta>
-      </div>
+  // ใช้ตำแหน่งจริงของ layout (offsetTop) — ไม่นับการเลื่อนของแอนิเมชันที่ยังไม่จบ
+  const scrollDown = () => {
+    let el = document.getElementById('home-live') as HTMLElement | null;
+    let top = 0;
+    while (el) {
+      top += el.offsetTop;
+      el = el.offsetParent as HTMLElement | null;
+    }
+    window.scrollTo({ top: Math.max(0, top - 56), behavior: 'smooth' });
+  };
 
+  return (
+    <>
+      {/* จอแรก: เต็มความสูงหน้าจอ (มือถือ/คอม) + ลูกศรบอกว่าเลื่อนลงได้ */}
+      <section
+        className="relative flex flex-col items-center justify-center overflow-hidden px-4 pt-10 pb-40 text-center md:pb-28"
+        style={{ minHeight: `calc(100svh - 48px${ribbon ? ' - 46px' : ''})` }}
+      >
+        <div
+          aria-hidden
+          className="pointer-events-none absolute top-[10%] left-1/2 -z-0 h-[420px] w-[min(900px,120vw)] -translate-x-1/2 bg-[radial-gradient(closest-side,rgb(10_132_255/0.2),transparent)]"
+        />
+        <div className="apple-fade-in relative flex items-end justify-center gap-2 sm:gap-6">
+          <Img3D name="heart" size={84} className="float-3d-slow mb-3 sm:!size-[112px]" eager />
+          <Img3D name="hospital" size={132} className="float-3d sm:!size-[176px]" eager />
+          <Img3D name="ambulance" size={84} className="float-3d-slow mb-3 sm:!size-[112px]" eager />
+        </div>
+        <p className="apple-fade-in relative mt-8 text-[14px] text-[#86868b] sm:text-[17px]">
+          {fmtDateLong(todayKey())} · {time} น.
+        </p>
+        <h1 className="apple-fade-in apple-headline relative mt-2 text-[44px] sm:text-[64px] lg:text-[80px]">ICU Smart Center</h1>
+        <p className="apple-fade-in relative mt-2 text-[21px] leading-snug text-[#f5f5f7] sm:text-[28px]">ข้อมูลหอผู้ป่วยวิกฤต ครบในที่เดียว</p>
+        <p className="apple-fade-in relative mt-1 text-[15px] text-[#86868b] sm:text-[17px]">{HOSPITAL}</p>
+        <div className="apple-fade-in relative mt-7 flex flex-wrap justify-center gap-3 sm:gap-4">
+          <Cta primary onClick={() => onGo('overview')}>
+            ดูแดชบอร์ด
+          </Cta>
+          <Cta onClick={() => onGo('wall')}>เปิดโหมดเต็มจอ</Cta>
+        </div>
+        <button
+          type="button"
+          onClick={scrollDown}
+          aria-label="เลื่อนลงเพื่อดูข้อมูลเพิ่มเติม"
+          className="absolute bottom-[104px] left-1/2 flex -translate-x-1/2 flex-col items-center gap-1 text-[12px] text-[#a1a1a6] hover:text-white md:bottom-8"
+        >
+          <span>เลื่อนลง</span>
+          <span className="nudge-down inline-flex size-10 items-center justify-center rounded-full bg-white/10 backdrop-blur">
+            <ChevronDown className="size-5" strokeWidth={2.2} />
+          </span>
+        </button>
+      </section>
+
+      {/* ผังเตียงสด + ตัวเลขหลัก + รับ-จำหน่ายวันนี้ */}
+      <Reveal as="section" id="home-live" className="px-4 pt-6 pb-16 text-center sm:pb-24">
+        <p className="text-[17px] font-semibold text-[#30d158] sm:text-[19px]">สถานะเตียงตอนนี้</p>
+        <h2 className="apple-headline mt-1 text-[32px] sm:text-[48px]">ICU ขณะนี้</h2>
       {/* “ภาพสินค้า”: ผังเตียงสดแบบเรืองแสง */}
-      <div className="mx-auto mt-12 max-w-[980px] sm:mt-16">
+      <div className="mx-auto mt-10 max-w-[980px] sm:mt-12">
         <div className="relative rounded-[32px] bg-[radial-gradient(120%_90%_at_50%_0%,#1c1c1e_0%,#0a0a0a_60%,#000_100%)] p-4 shadow-[0_0_0_1px_rgb(255_255_255/0.06)] sm:p-8">
           <div className="grid grid-cols-4 gap-2.5 sm:gap-4">
             {beds.map((b) => (
@@ -106,8 +200,35 @@ function Hero({ onGo }: { onGo: (v: View) => void }) {
           <Stat value={cleaning} label="รอทำความสะอาด" tone="#ffd60a" />
           <Stat value={vent} label="ใช้เครื่องช่วยหายใจ" tone="#64d2ff" />
         </dl>
+        <FlowRow />
       </div>
-    </section>
+      </Reveal>
+    </>
+  );
+}
+
+const FLOW_DARK: Record<string, string> = { admit: '#2997ff', home: '#30d158', ward: '#bf5af2', refer: '#ff9f0a', expired: '#a1a1a6' };
+
+/** ยอดรับ-จำหน่ายวันนี้ (กลับบ้าน / ย้ายวอร์ด / Refer / เสียชีวิต) */
+function FlowRow() {
+  const { today, month } = useFlow();
+  return (
+    <div className="mx-auto mt-12 max-w-[820px]">
+      <p className="text-[14px] text-[#86868b]">รับ-จำหน่ายวันนี้</p>
+      <div className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-5 sm:gap-3">
+        {FLOW_ITEMS.map((f) => (
+          <div key={f.key} className="rounded-[18px] bg-[#161617] px-3 py-3 shadow-[inset_0_0_0_1px_rgb(255_255_255/0.06)]">
+            <p className="apple-headline num text-[30px] sm:text-[36px]" style={{ color: FLOW_DARK[f.key] }}>
+              {today[f.key]}
+            </p>
+            <p className="text-[13px] text-[#a1a1a6]">{f.label}</p>
+          </div>
+        ))}
+      </div>
+      <p className="num mt-3 text-[13px] text-[#86868b]">
+        จำหน่ายรวมวันนี้ {today.out} ราย · เดือนนี้ {month.out} ราย
+      </p>
+    </div>
   );
 }
 
@@ -126,8 +247,8 @@ function BedGlow({ b, onClick }: { b: Bed; onClick: () => void }) {
     >
       <span
         aria-hidden
-        className="absolute -right-6 -bottom-8 size-24 rounded-full opacity-50 blur-2xl transition-opacity duration-500 group-hover:opacity-80 sm:size-32"
-        style={{ background: color }}
+        className="absolute -right-10 -bottom-12 size-32 opacity-60 transition-opacity duration-500 group-hover:opacity-90 sm:size-44"
+        style={{ background: `radial-gradient(closest-side, ${color}, transparent)` }}
       />
       <span className="num relative text-[13px] font-semibold text-[#f5f5f7] sm:text-[17px]">{b.bedNumber.replace('ICU-', '')}</span>
       <span className="relative">
@@ -155,7 +276,7 @@ function NewsHero({ n, onRead, onGo }: { n: News; onRead: () => void; onGo: (v: 
   const src = imageUrl(n.image);
   const [failed, setFailed] = useState(false);
   return (
-    <section className="border-t border-white/5 bg-[#0a0a0a] px-4 pt-14 pb-0 text-center sm:pt-20">
+    <Reveal as="section" className="border-t border-white/5 bg-[#0a0a0a] px-4 pt-14 pb-0 text-center sm:pt-20">
       <p className="text-[17px] font-semibold text-[#ff9f0a] sm:text-[19px]">ข่าวสาร & ประกาศ</p>
       <h2 className="apple-headline mx-auto mt-2 max-w-[880px] text-[32px] sm:text-[48px]">{n.title}</h2>
       <p className="mx-auto mt-3 flex max-w-[700px] flex-wrap items-center justify-center gap-2 text-[17px] text-[#a1a1a6] sm:text-[21px]">
@@ -172,12 +293,12 @@ function NewsHero({ n, onRead, onGo }: { n: News; onRead: () => void; onGo: (v: 
         {src && !failed ? (
           <img src={src} alt="" referrerPolicy="no-referrer" onError={() => setFailed(true)} className="aspect-[16/7] w-full object-cover" />
         ) : (
-          <div className="relative flex aspect-[16/6] items-center justify-center bg-[radial-gradient(70%_120%_at_50%_100%,#ff9f0a55,transparent_70%)]">
-            <Megaphone className="size-20 text-[#ff9f0a] sm:size-28" strokeWidth={1.1} />
+          <div className="relative flex aspect-[16/7] items-center justify-center bg-[radial-gradient(70%_120%_at_50%_100%,#ff9f0a44,transparent_70%)] sm:aspect-[16/6]">
+            <Img3D name="megaphone" size={150} className="pop-3d float-3d sm:!size-[220px]" />
           </div>
         )}
       </div>
-    </section>
+    </Reveal>
   );
 }
 
@@ -207,7 +328,8 @@ function TileGrid({ onGo }: { onGo: (v: View) => void }) {
         onMore={() => onGo('kpi')}
         visual={
           <div className="text-center">
-            <p className="apple-headline num text-[72px] text-[#f5f5f7] sm:text-[96px]">
+            <Img3D name="target" size={120} className="pop-3d mx-auto sm:!size-[150px]" />
+            <p className="apple-headline num mt-4 text-[64px] text-[#f5f5f7] sm:text-[80px]">
               {judged.length ? (
                 <>
                   {pass}
@@ -223,11 +345,14 @@ function TileGrid({ onGo }: { onGo: (v: View) => void }) {
       />
       <Tile
         title="ตารางเวร"
+        delay={120}
         sub={`ทีม${SHIFT_BY_KEY[duty.shift].label}ตอนนี้`}
         glow="#30d158"
         onMore={() => onGo('roster')}
         visual={
           duty.team.length ? (
+            <div className="text-center">
+            <Img3D name="calendar" size={96} className="pop-3d mx-auto mb-6 sm:!size-[120px]" />
             <div className="flex flex-wrap justify-center gap-4 px-4">
               {duty.team.slice(0, 6).map((t, i) => (
                 <div key={`${t.name}-${i}`} className="flex w-[84px] flex-col items-center">
@@ -236,8 +361,9 @@ function TileGrid({ onGo }: { onGo: (v: View) => void }) {
                 </div>
               ))}
             </div>
+            </div>
           ) : (
-            <BigIcon icon={ClipboardList} tone="#30d158" />
+            <Big3D name="calendar" />
           )
         }
       />
@@ -249,51 +375,57 @@ function TileGrid({ onGo }: { onGo: (v: View) => void }) {
         visual={
           leader ? (
             <div className="text-center">
-              <Avatar staff={leader} size={112} className="mx-auto shadow-[0_0_60px_-10px_#bf5af2]" />
+              <div className="relative mx-auto w-fit">
+                <Avatar staff={leader} size={112} className="shadow-[0_0_60px_-10px_#bf5af2]" />
+                <Img3D name="health-worker" size={64} className="pop-3d absolute -right-10 -bottom-2" />
+              </div>
               <p className="mt-4 text-[19px] font-semibold text-[#f5f5f7]">{leader.name}</p>
               <p className="text-[14px] text-[#a1a1a6]">{leader.position || leader.group}</p>
               {staff.length > 1 && <p className="mt-1 text-[13px] text-[#86868b]">และทีมอีก {staff.length - 1} คน</p>}
             </div>
           ) : (
-            <BigIcon icon={ClipboardList} tone="#bf5af2" />
+            <Big3D name="health-worker" />
           )
         }
       />
       <Tile
         title="คู่มือ & SOP"
+        delay={120}
         sub="ขั้นตอนการทำงาน ระเบียบ ข้อบังคับ"
         glow="#30d158"
         onMore={() => onGo('docs')}
-        visual={<BigIcon icon={BookOpen} tone="#30d158" caption={count(docs.filter((d) => d.type !== CPG).length, 'ฉบับ')} />}
+        visual={<Big3D name="books" caption={count(docs.filter((d) => d.type !== CPG).length, 'ฉบับ')} />}
       />
       <Tile
         title="แนวทางการรักษา"
         sub="Clinical practice guideline ของหน่วยงาน"
         glow="#ff375f"
         onMore={() => onGo('guidelines')}
-        visual={<BigIcon icon={Stethoscope} tone="#ff375f" caption={count(docs.filter((d) => d.type === CPG).length, 'ฉบับ')} />}
+        visual={<Big3D name="stethoscope" caption={count(docs.filter((d) => d.type === CPG).length, 'ฉบับ')} />}
       />
       <Tile
         title="เอกสารดาวน์โหลด"
+        delay={120}
         sub="ไฟล์ PDF และแบบฟอร์มต่าง ๆ"
         glow="#ffd60a"
         onMore={() => onGo('downloads')}
-        visual={<BigIcon icon={Download} tone="#ffd60a" caption={count(docs.filter((d) => d.link).length, 'ไฟล์')} />}
+        visual={<Big3D name="download" caption={count(docs.filter((d) => d.link).length, 'ไฟล์')} />}
       />
       <Tile
         title="Google Forms"
         sub="แบบประเมิน รายงาน ลงทะเบียน"
         glow="#0a84ff"
         onMore={() => onGo('forms')}
-        visual={<BigIcon icon={ClipboardList} tone="#0a84ff" caption={count(data.links.filter((l) => l.active).length, 'แบบฟอร์ม')} />}
+        visual={<Big3D name="memo" caption={count(data.links.filter((l) => l.active).length, 'แบบฟอร์ม')} />}
       />
       <Tile
         title="จอแสดงผล"
+        delay={120}
         sub="โหมดเต็มจอสำหรับทีวีและแท็บเล็ต"
         glow="#64d2ff"
         onMore={() => onGo('wall')}
         moreLabel="เปิดเลย"
-        visual={<BigIcon icon={Maximize} tone="#64d2ff" />}
+        visual={<Big3D name="display" />}
       />
     </section>
   );
@@ -306,6 +438,7 @@ function Tile({
   visual,
   onMore,
   moreLabel = 'ดูเพิ่มเติม',
+  delay = 0,
 }: {
   title: string;
   sub: string;
@@ -313,10 +446,15 @@ function Tile({
   visual: ReactNode;
   onMore: () => void;
   moreLabel?: string;
+  delay?: number;
 }) {
   return (
-    <article className="apple-tile flex min-h-[460px] flex-col items-center px-6 pt-12 pb-12 text-center sm:min-h-[560px] sm:pt-14">
-      <span aria-hidden className="apple-glow rounded-full" style={{ background: glow }} />
+    <Reveal
+      as="article"
+      delay={delay}
+      className="apple-tile flex min-h-[440px] flex-col items-center px-6 pt-12 pb-12 text-center sm:min-h-[540px] sm:pt-14"
+    >
+      <span aria-hidden className="apple-glow" style={{ '--glow': glow } as CSSProperties} />
       <h3 className="apple-headline text-[32px] sm:text-[40px]">{title}</h3>
       <p className="mt-2 text-[17px] text-[#a1a1a6] sm:text-[21px]">{sub}</p>
       <div className="mt-5 flex flex-wrap justify-center gap-3">
@@ -325,23 +463,15 @@ function Tile({
         </Cta>
       </div>
       <div className="flex w-full flex-1 items-center justify-center pt-10">{visual}</div>
-    </article>
+    </Reveal>
   );
 }
 
-function BigIcon({ icon: Icon, tone, caption }: { icon: LucideIcon; tone: string; caption?: string }) {
+function Big3D({ name, caption }: { name: Img3DName; caption?: string }) {
   return (
     <div className="text-center">
-      <span
-        className="mx-auto inline-flex size-[120px] items-center justify-center rounded-[32px] sm:size-[140px] sm:rounded-[36px]"
-        style={{
-          background: `linear-gradient(160deg, color-mix(in srgb, ${tone} 75%, white) 0%, ${tone} 100%)`,
-          boxShadow: `0 30px 80px -20px ${tone}, inset 0 1px 0 rgb(255 255 255 / 0.4)`,
-        }}
-      >
-        <Icon className="size-14 text-white sm:size-16" strokeWidth={1.5} />
-      </span>
-      {caption && <p className="mt-6 text-[17px] text-[#a1a1a6]">{caption}</p>}
+      <Img3D name={name} size={150} className="pop-3d mx-auto sm:!size-[190px]" />
+      {caption && <p className="mt-5 text-[17px] text-[#a1a1a6]">{caption}</p>}
     </div>
   );
 }
@@ -351,7 +481,7 @@ function BigIcon({ icon: Icon, tone, caption }: { icon: LucideIcon; tone: string
 function NewsShelf({ news, onRead, onGo }: { news: News[]; onRead: (n: News) => void; onGo: (v: View) => void }) {
   if (!news.length) return null;
   return (
-    <section className="bg-black py-16 sm:py-20">
+    <Reveal as="section" className="bg-black py-16 sm:py-20">
       <div className="mx-auto flex max-w-[1024px] items-end justify-between px-4 sm:px-6">
         <h2 className="apple-headline text-[28px] sm:text-[40px]">ข่าวล่าสุด</h2>
         <button type="button" onClick={() => onGo('news')} className="apple-link inline-flex items-center text-[17px]">
@@ -363,7 +493,7 @@ function NewsShelf({ news, onRead, onGo }: { news: News[]; onRead: (n: News) => 
           <ShelfCard key={n.id} n={n} onOpen={() => onRead(n)} />
         ))}
       </div>
-    </section>
+    </Reveal>
   );
 }
 
@@ -397,8 +527,8 @@ function ShelfCard({ n, onOpen }: { n: News; onOpen: () => void }) {
         {src && !failed ? (
           <img src={src} alt="" loading="lazy" referrerPolicy="no-referrer" onError={() => setFailed(true)} className="size-full object-cover transition-transform duration-700 group-hover:scale-105" />
         ) : (
-          <div className="flex size-full items-end justify-center" style={{ background: `radial-gradient(80% 100% at 50% 100%, ${tone}66, transparent 75%)` }}>
-            <Megaphone className="mb-6 size-12" style={{ color: tone }} strokeWidth={1.3} />
+          <div className="flex size-full items-end justify-center" style={{ background: `radial-gradient(80% 100% at 50% 100%, ${tone}55, transparent 75%)` }}>
+            <Img3D name={n.category === 'ด่วน' || n.category === 'ประกาศ' ? 'megaphone' : 'news'} size={104} className="mb-4 transition-transform duration-700 group-hover:-translate-y-1 group-hover:scale-105" />
           </div>
         )}
       </div>

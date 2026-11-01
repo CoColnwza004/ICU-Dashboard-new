@@ -1,32 +1,74 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
-import { AdminPage } from './components/AdminPage';
-import { BedPanel } from './components/BedPanel';
-import { DocsPage, DownloadsPage } from './components/DocsPage';
-import { FormsPage } from './components/FormsPage';
+import { lazy, Suspense, useCallback, useEffect, useState, type ReactNode } from 'react';
 import { HomePage } from './components/HomePage';
-import { Indicators } from './components/Indicators';
-import { KpiPage } from './components/KpiPage';
 import { MenuSheet } from './components/Menu';
-import { Monthly } from './components/Monthly';
-import { NewsPage } from './components/NewsPage';
-import { Overview } from './components/Overview';
-import { isLandscape, pdfFilename, PrintReport, type PrintJob } from './components/PrintReport';
-import { RosterPage } from './components/RosterPage';
-import { SettingsPanel } from './components/SettingsPanel';
-import { StaffPage } from './components/StaffPage';
-import { Stats } from './components/Stats';
+import type { PrintJob } from './components/PrintReport';
+import { SiteFooter } from './components/SiteFooter';
 import { DashboardNav, TopBar } from './components/TopBar';
 import { Popup } from './components/ui';
-import { SiteFooter } from './components/SiteFooter';
-import { enterFullscreen, WallView } from './components/WallView';
-import { exportPdf } from './lib/pdf';
+import { enterFullscreen } from './lib/fullscreen';
 import { sectionOf, useHashView, type Intent, type View } from './lib/hooks';
-import { StoreContext, useIcuStore } from './lib/store';
+import { StoreContext, SyncContext, useIcuStore } from './lib/store';
 import { nextPref, useApplyTheme, useThemePref } from './lib/theme';
 
+/* หน้าอื่น ๆ โหลดเมื่อใช้ (หน้าแรกเปิดเร็วขึ้น) แล้วโหลดล่วงหน้าตอนเครื่องว่าง → เปลี่ยนหน้าได้ทันที */
+const pages = {
+  overview: () => import('./components/Overview'),
+  indicators: () => import('./components/Indicators'),
+  stats: () => import('./components/Stats'),
+  monthly: () => import('./components/Monthly'),
+  roster: () => import('./components/RosterPage'),
+  staff: () => import('./components/StaffPage'),
+  docs: () => import('./components/DocsPage'),
+  news: () => import('./components/NewsPage'),
+  kpi: () => import('./components/KpiPage'),
+  forms: () => import('./components/FormsPage'),
+  admin: () => import('./components/AdminPage'),
+  wall: () => import('./components/WallView'),
+  bed: () => import('./components/BedPanel'),
+  settings: () => import('./components/SettingsPanel'),
+  print: () => import('./components/PrintReport'),
+  pdf: () => import('./components/PdfExporter'),
+};
+const Overview = lazy(() => pages.overview().then((m) => ({ default: m.Overview })));
+const Indicators = lazy(() => pages.indicators().then((m) => ({ default: m.Indicators })));
+const Stats = lazy(() => pages.stats().then((m) => ({ default: m.Stats })));
+const Monthly = lazy(() => pages.monthly().then((m) => ({ default: m.Monthly })));
+const RosterPage = lazy(() => pages.roster().then((m) => ({ default: m.RosterPage })));
+const StaffPage = lazy(() => pages.staff().then((m) => ({ default: m.StaffPage })));
+const DocsPage = lazy(() => pages.docs().then((m) => ({ default: m.DocsPage })));
+const DownloadsPage = lazy(() => pages.docs().then((m) => ({ default: m.DownloadsPage })));
+const NewsPage = lazy(() => pages.news().then((m) => ({ default: m.NewsPage })));
+const KpiPage = lazy(() => pages.kpi().then((m) => ({ default: m.KpiPage })));
+const FormsPage = lazy(() => pages.forms().then((m) => ({ default: m.FormsPage })));
+const AdminPage = lazy(() => pages.admin().then((m) => ({ default: m.AdminPage })));
+const WallView = lazy(() => pages.wall().then((m) => ({ default: m.WallView })));
+const BedPanel = lazy(() => pages.bed().then((m) => ({ default: m.BedPanel })));
+const SettingsPanel = lazy(() => pages.settings().then((m) => ({ default: m.SettingsPanel })));
+const PrintReport = lazy(() => pages.print().then((m) => ({ default: m.PrintReport })));
+const PdfExporter = lazy(() => pages.pdf().then((m) => ({ default: m.PdfExporter })));
+
+const usePrefetchPages = () => {
+  useEffect(() => {
+    const w = window as Window & { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number };
+    const run = () => Object.values(pages).forEach((load) => void load().catch(() => {}));
+    if (w.requestIdleCallback) w.requestIdleCallback(run, { timeout: 4000 });
+    else window.setTimeout(run, 2500);
+  }, []);
+};
+
+function PageFallback() {
+  return (
+    <div className="flex min-h-[60vh] items-center justify-center" role="status" aria-label="กำลังโหลด">
+      <span className="animate-spin-slow size-7 rounded-full border-[3px] border-fill border-t-accent" />
+    </div>
+  );
+}
+
+const Lazy = ({ children }: { children: ReactNode }) => <Suspense fallback={<PageFallback />}>{children}</Suspense>;
+
 export default function App() {
-  const store = useIcuStore();
+  const { store, sync } = useIcuStore();
+  usePrefetchPages();
   const { view, intent, go, clearIntent } = useHashView();
   const [bed, setBed] = useState<string | null>(null);
   const [settings, setSettings] = useState(false);
@@ -73,10 +115,16 @@ export default function App() {
   // พิมพ์หลังจากรายงานถูก render แล้ว
   useEffect(() => {
     if (!printJob) return;
-    const t = window.setTimeout(() => window.print(), 150);
+    let t = 0;
+    let cancelled = false;
+    // รอให้โค้ดรายงานโหลดและแสดงผลก่อน แล้วค่อยเปิดหน้าต่างพิมพ์
+    void pages.print().then(() => {
+      if (!cancelled) t = window.setTimeout(() => window.print(), 300);
+    });
     const done = () => setPrintJob(null);
     window.addEventListener('afterprint', done);
     return () => {
+      cancelled = true;
       window.clearTimeout(t);
       window.removeEventListener('afterprint', done);
     };
@@ -92,16 +140,21 @@ export default function App() {
   if (view === 'wall') {
     return (
       <StoreContext.Provider value={store}>
-        <div className="screen-only">
-          <WallView onExit={() => go('home')} />
-        </div>
-        {popup}
+        <SyncContext.Provider value={sync}>
+          <div className="screen-only">
+            <Lazy>
+              <WallView onExit={() => go('home')} />
+            </Lazy>
+          </div>
+          {popup}
+        </SyncContext.Provider>
       </StoreContext.Provider>
     );
   }
 
   return (
     <StoreContext.Provider value={store}>
+      <SyncContext.Provider value={sync}>
       <div className="screen-only min-h-dvh">
         <TopBar
           view={view}
@@ -118,6 +171,7 @@ export default function App() {
         )}
         {!apple && (
           <main className="mx-auto max-w-[1080px] px-4 pb-20 sm:px-6 sm:pb-28">
+            <Lazy>
             {sectionOf(view) === 'dashboard' && <DashboardNav view={view} onView={(v) => navigate(v)} />}
             {view === 'admin' && <AdminPage onGo={navigate} onSettings={() => setSettings(true)} />}
             {view === 'news' && <NewsPage startNew={intent === 'new'} onStarted={started} />}
@@ -162,66 +216,22 @@ export default function App() {
                 pdfBusy={!!pdfJob}
               />
             )}
+            </Lazy>
           </main>
         )}
         <SiteFooter onGo={(v) => navigate(v)} />
         <MenuSheet open={menu} onClose={() => setMenu(false)} onGo={(v) => navigate(v)} />
-        {isStaff && <BedPanel bedNumber={bed} onClose={closeBed} />}
-        {isStaff && <SettingsPanel open={settings} onClose={closeSettings} />}
+        <Suspense fallback={null}>
+          {isStaff && <BedPanel bedNumber={bed} onClose={closeBed} />}
+          {isStaff && settings && <SettingsPanel open={settings} onClose={closeSettings} />}
+        </Suspense>
       </div>
       {popup}
-      {printJob && <PrintReport job={printJob} />}
-      {pdfJob && <PdfExporter job={pdfJob} onDone={() => setPdfJob(null)} toast={store.toast} />}
+      <Suspense fallback={null}>
+        {printJob && <PrintReport job={printJob} />}
+        {pdfJob && <PdfExporter job={pdfJob} onDone={() => setPdfJob(null)} toast={store.toast} />}
+      </Suspense>
+      </SyncContext.Provider>
     </StoreContext.Provider>
-  );
-}
-
-/** สร้างรายงานนอกหน้าจอ (กว้างเท่า A4) แล้วบันทึกเป็นไฟล์ PDF */
-function PdfExporter({
-  job,
-  onDone,
-  toast,
-}: {
-  job: PrintJob;
-  onDone: () => void;
-  toast: (t: string, tone?: 'default' | 'error', detail?: string) => void;
-}) {
-  const ref = useRef<HTMLDivElement>(null);
-  const started = useRef(false);
-  const W = isLandscape(job) ? 1100 : 760;
-  useEffect(() => {
-    if (started.current) return;
-    started.current = true;
-    const run = async () => {
-      await new Promise((r) => window.setTimeout(r, 250)); // รอให้กราฟวาดเสร็จ
-      try {
-        await exportPdf(ref.current!, pdfFilename(job), isLandscape(job));
-        toast('บันทึกไฟล์ PDF แล้ว');
-      } catch (e) {
-        console.error(e);
-        toast('สร้าง PDF ไม่สำเร็จ', 'error', 'ลองใช้ปุ่ม “พิมพ์” แทน');
-      } finally {
-        onDone();
-      }
-    };
-    void run();
-  }, [job, onDone, toast]);
-  return createPortal(
-    <div
-      aria-hidden
-      style={{
-        position: 'fixed',
-        left: -10000,
-        top: 0,
-        width: W,
-        background: '#fff',
-        pointerEvents: 'none',
-      }}
-    >
-      <div ref={ref} style={{ width: W, background: '#fff' }}>
-        <PrintReport job={job} mode="pdf" />
-      </div>
-    </div>,
-    document.body,
   );
 }

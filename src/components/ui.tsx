@@ -316,6 +316,27 @@ export function Modal({
 
 /* ------------------------------------------------------------------ */
 
+/** นาฬิกา: อัปเดตเฉพาะตัวเลข ไม่ทำให้ทั้งหน้า re-render ทุกวินาที */
+export function Clock({ seconds, secondsClassName }: { seconds?: boolean; secondsClassName?: string }) {
+  const now = useNowTick(seconds ? 1000 : 15_000);
+  const d = new Date(now);
+  return (
+    <>
+      {d.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}
+      {seconds && <span className={secondsClassName}>{String(d.getSeconds()).padStart(2, '0')}</span>}
+    </>
+  );
+}
+
+const useNowTick = (ms: number) => {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = window.setInterval(() => setNow(Date.now()), ms);
+    return () => window.clearInterval(t);
+  }, [ms]);
+  return now;
+};
+
 /** หัวหน้าแบบเว็บไซต์ Apple: ป้ายสีเล็ก · หัวข้อใหญ่กลางจอ · คำอธิบาย · ปุ่มเม็ดยา */
 export function PageHero({
   eyebrow,

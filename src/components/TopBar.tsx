@@ -17,7 +17,7 @@ import {
 import { relativeTime } from '../lib/date';
 import { sectionOf, useNow, type Section, type View } from '../lib/hooks';
 import { sheetLink } from '../lib/sheetApi';
-import { useStore } from '../lib/store';
+import { useStore, useSync } from '../lib/store';
 import type { ThemePref } from '../lib/theme';
 import { cx, Dot, Segmented } from './ui';
 
@@ -61,7 +61,7 @@ export function DashboardNav({ view, onView }: { view: View; onView: (v: View) =
 }
 
 export function SyncBadge({ onClick, compact }: { onClick?: () => void; compact?: boolean }) {
-  const { state, lastSync, error } = useStore();
+  const { state, lastSync, error } = useSync();
   const now = useNow(1000);
   const map = {
     local: { dot: 'bg-ink-3', text: 'ยังไม่เชื่อมต่อ Google Sheet', pulse: false },

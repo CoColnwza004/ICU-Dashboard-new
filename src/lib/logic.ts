@@ -557,6 +557,15 @@ export const monthlySummary = (data: IcuData, ym: string) => {
   };
 };
 
+/** ยอดรับ-จำหน่ายจากทะเบียน (Log) · prefix = 'yyyy-MM-dd' (วัน) หรือ 'yyyy-MM' (เดือน) */
+export const flowCounts = (data: IcuData, prefix: string) => {
+  const c = { admit: 0, home: 0, ward: 0, refer: 0, expired: 0 };
+  data.logs.forEach((l) => {
+    if (l.timestamp.startsWith(prefix) && l.event in c) c[l.event as keyof typeof c] += 1;
+  });
+  return { ...c, out: c.home + c.ward + c.refer + c.expired };
+};
+
 export const availableMonths = (data: IcuData) => {
   const set = new Set<string>([todayKey().slice(0, 7)]);
   data.daily.forEach((d) => set.add(d.date.slice(0, 7)));

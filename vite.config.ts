@@ -5,12 +5,7 @@ import { defineConfig } from 'vite';
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   build: {
-    // ไฟล์หลัก ~160 kB (gzip) รวม React + ทุกหน้า — กราฟและ PDF แยกไฟล์แล้ว
+    // หน้าต่าง ๆ แยกไฟล์และโหลดเมื่อใช้ (React.lazy) — กราฟ (recharts) และ PDF โหลดเฉพาะหน้าที่ต้องใช้
     chunkSizeWarningLimit: 700,
-    rollupOptions: {
-      output: {
-        manualChunks: { charts: ['recharts'], icons: ['lucide-react'] },
-      },
-    },
   },
 });

@@ -2,7 +2,7 @@ import { ArrowUpRight, BedDouble, ChevronRight, Maximize, Siren, Users, Wind } f
 import { useMemo, useState, type ReactNode } from 'react';
 import { DEVICES, EVENT_META, HOSPITAL, INDICATORS, STATUS_META, UNIT } from '../lib/constants';
 import { fmtDateLong, fmtDateShort, fmtDateTime, fmtDayMonth, shiftDate, todayKey } from '../lib/date';
-import { useNow, type View } from '../lib/hooks';
+import { type View } from '../lib/hooks';
 import { DEVICE_ICON, EVENT_ICON, INDICATOR_ICON } from '../lib/icons';
 import { countsFromBeds, emptyDaily, findDaily, occupied, updateBed } from '../lib/logic';
 import { sheetLink } from '../lib/sheetApi';
@@ -10,10 +10,11 @@ import { useStore } from '../lib/store';
 import type { DailyKey } from '../types';
 import { BedCard } from './BedCard';
 import { DutyCard } from './DutyCard';
-import { enterFullscreen } from './WallView';
+import { FlowTiles } from './Flow';
+import { enterFullscreen } from '../lib/fullscreen';
 import { bedAcuitySlices, bedStatusSlices } from '../lib/breakdowns';
 import { CHART_TYPES, DonutChart, SeriesChart, type ChartType } from './charts';
-import { Button, cx, Dot, Empty, PageHero, SectionHeader, Segmented } from './ui';
+import { Button, Clock, cx, Dot, Empty, PageHero, SectionHeader, Segmented } from './ui';
 import { AcuityBar, BedStrip, Delta, Ring, Sparkline } from './viz';
 
 export function Overview({
@@ -28,7 +29,6 @@ export function Overview({
   onSettings?: () => void;
 }) {
   const { data, meta, state, commit, isStaff } = useStore();
-  const now = useNow(1000);
   const today = todayKey();
   const beds = data.beds;
   const occ = occupied(beds);
@@ -71,7 +71,6 @@ export function Overview({
   );
 
   const [chartType, setChartType] = useState<ChartType>('auto');
-  const clock = new Date(now).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
 
   return (
     <div className="space-y-14 sm:space-y-16">
@@ -84,7 +83,10 @@ export function Overview({
                 <Dot className="bg-good" />
                 <span className="absolute inset-0 animate-ping rounded-full bg-good/40 [animation-duration:2.4s]" />
               </span>
-              {fmtDateLong(today)} · <span className="num">{clock}</span> น.
+              {fmtDateLong(today)} · <span className="num">
+                <Clock />
+              </span>{' '}
+              น.
             </span>
           }
           tone="var(--color-ink-2)"
@@ -166,6 +168,19 @@ export function Overview({
       {/* ทีมเวรนี้ */}
       <section className="-mt-6 sm:-mt-8">
         <DutyCard onOpenRoster={() => onView('roster')} />
+      </section>
+
+      {/* รับ-จำหน่าย วันนี้ / เดือนนี้ */}
+      <section className="-mt-6 sm:-mt-8">
+        <div className="card p-5 sm:p-6">
+          <div className="mb-4 flex flex-wrap items-baseline justify-between gap-2">
+            <h2 className="text-[17px] font-semibold">รับ-จำหน่าย · วันนี้</h2>
+            <button type="button" onClick={() => onView('monthly')} className="link inline-flex items-center text-[14px]">
+              ดูรายเดือน <ChevronRight className="size-4" />
+            </button>
+          </div>
+          <FlowTiles />
+        </div>
       </section>
 
       {/* Beds */}

@@ -5,7 +5,7 @@ import { relativeTime } from '../lib/date';
 import { useNow } from '../lib/hooks';
 import { demoData, initialData, pushAllOps } from '../lib/logic';
 import { fetchSnapshot, sheetLink, validateUrl } from '../lib/sheetApi';
-import { useStore } from '../lib/store';
+import { useStore, useSync } from '../lib/store';
 import type { IcuData } from '../types';
 import { Button, cx, Dot, Modal } from './ui';
 
@@ -44,7 +44,8 @@ const STEPS = [
 
 export function SettingsPanel({ open, onClose }: { open: boolean; onClose: () => void }) {
   const store = useStore();
-  const { config, meta, state, lastSync, error, data, envConfigured, pollMs } = store;
+  const { config, meta, state, data, envConfigured, pollMs } = store;
+  const { lastSync, error } = useSync();
   const now = useNow(1000);
   const [url, setUrl] = useState(config.url);
   const [token, setToken] = useState(config.token);

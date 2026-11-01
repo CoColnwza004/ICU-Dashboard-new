@@ -404,14 +404,15 @@ export function useIcuStore() {
     setData(next);
   }, []);
 
-  return useMemo(
+  // เวลาซิงก์ล่าสุดเปลี่ยนทุกรอบดึงข้อมูล (5 วินาที) — แยกไว้ใน SyncContext
+  // เพื่อให้เฉพาะจุดสถานะการเชื่อมต่อ re-render ไม่ใช่ทั้งหน้าเว็บ
+  const sync = useMemo(() => ({ state, lastSync, error }), [state, lastSync, error]);
+  const store = useMemo(
     () => ({
       data,
       meta,
       config,
       state,
-      lastSync,
-      error,
       notice,
       dismissNotice,
       isStaff: !!pin,
@@ -430,13 +431,19 @@ export function useIcuStore() {
       applySnapshot,
     }),
     [
-      data, meta, config, state, lastSync, error, notice, dismissNotice, pin, pinSet, login, logout, changePin,
+      data, meta, config, state, notice, dismissNotice, pin, pinSet, login, logout, changePin,
       toast, commit, send, pull, setConfig, replaceLocal, applySnapshot,
     ],
   );
+  return { store, sync };
 }
 
-export type IcuStore = ReturnType<typeof useIcuStore>;
+export type IcuStore = ReturnType<typeof useIcuStore>['store'];
+export type SyncInfo = ReturnType<typeof useIcuStore>['sync'];
+
+export const SyncContext = createContext<SyncInfo>({ state: 'local', lastSync: null, error: null });
+/** สถานะการเชื่อมต่อชีต (เปลี่ยนบ่อย) */
+export const useSync = () => useContext(SyncContext);
 
 export const StoreContext = createContext<IcuStore | null>(null);
 

@@ -1,45 +1,22 @@
 import { Maximize, Minimize, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { Bed } from '../types';
-import { ACUITY_META, DEVICES, EVENT_META, HOSPITAL, INDICATORS, STATUS_META, UNIT } from '../lib/constants';
+import { ACUITY_META, DEVICES, EVENT_META, HOSPITAL, STATUS_META, UNIT } from '../lib/constants';
 import { daysBetween, fmtDateLong, fmtDateTime, fmtMonth, todayKey } from '../lib/date';
-import { DEVICE_ICON, EVENT_ICON, INDICATOR_ICON } from '../lib/icons';
+import { DEVICE_ICON, EVENT_ICON } from '../lib/icons';
 import { countsFromBeds, emptyDaily, findDaily, occupied } from '../lib/logic';
 import { fmtStat, STAT_DEFS, statsFor } from '../lib/stats';
-import { useNow } from '../lib/hooks';
 import { useStore } from '../lib/store';
 import { DutyCard } from './DutyCard';
+import { FlowTiles } from './Flow';
 import { SyncBadge } from './TopBar';
 import { hasRoster } from '../lib/roster';
-import { cx, Dot } from './ui';
+import { Clock, cx, Dot } from './ui';
 import { AcuityBar, Ring } from './viz';
 
-type FsDoc = Document & { webkitFullscreenElement?: Element; webkitExitFullscreen?: () => Promise<void> };
-type FsEl = HTMLElement & { webkitRequestFullscreen?: () => Promise<void> };
+import { canFullscreen, enterFullscreen, exitFullscreen, fsElement } from '../lib/fullscreen';
 
-const fsElement = () => document.fullscreenElement ?? (document as FsDoc).webkitFullscreenElement ?? null;
-const canFullscreen = () => {
-  const el = document.documentElement as FsEl;
-  return !!(el.requestFullscreen || el.webkitRequestFullscreen);
-};
-export const enterFullscreen = async () => {
-  const el = document.documentElement as FsEl;
-  try {
-    if (el.requestFullscreen) await el.requestFullscreen({ navigationUI: 'hide' });
-    else if (el.webkitRequestFullscreen) await el.webkitRequestFullscreen();
-  } catch {
-    /* เบราว์เซอร์ไม่อนุญาต (เช่น iPhone) — ยังแสดงโหมดจอแสดงผลได้ตามปกติ */
-  }
-};
-const exitFullscreen = async () => {
-  const d = document as FsDoc;
-  try {
-    if (document.exitFullscreen && document.fullscreenElement) await document.exitFullscreen();
-    else if (d.webkitExitFullscreen && d.webkitFullscreenElement) await d.webkitExitFullscreen();
-  } catch {
-    /* ignore */
-  }
-};
+export { enterFullscreen };
 
 /** กันหน้าจอดับระหว่างเปิดค้างไว้ (ทีวี / แท็บเล็ตที่เคาน์เตอร์พยาบาล) */
 const useWakeLock = () => {
@@ -85,7 +62,6 @@ const useIdle = (ms = 3500) => {
 
 export function WallView({ onExit }: { onExit: () => void }) {
   const { data } = useStore();
-  const now = useNow(1000);
   const idle = useIdle();
   const [isFs, setIsFs] = useState(() => !!fsElement());
   const [vmin, setVmin] = useState(() => Math.min(window.innerWidth, window.innerHeight));
@@ -139,73 +115,85 @@ export function WallView({ onExit }: { onExit: () => void }) {
     () => [...data.logs].sort((a, b) => b.timestamp.localeCompare(a.timestamp)).slice(0, 4),
     [data.logs],
   );
-  const d = new Date(now);
-  const clock = d.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
-  const secs = String(d.getSeconds()).padStart(2, '0');
   // จอเล็ก (มือถือ / แท็บเล็ตแนวตั้ง) เลื่อนดูได้ · จอใหญ่ (ทีวี / คอม) พอดีหน้าจอเดียว
   const cols = total <= 4 ? 'grid-cols-2' : total <= 6 ? 'grid-cols-2 sm:grid-cols-3' : 'grid-cols-2 sm:grid-cols-4';
+  const ctrl = 'inline-flex size-[clamp(36px,4.4vmin,52px)] items-center justify-center rounded-full transition-colors';
 
   return (
     <div
       className={cx(
-        'fixed inset-0 z-50 flex flex-col gap-[1.2vmin] overflow-y-auto p-[1.6vmin] lg:overflow-hidden',
+        'fixed inset-0 z-50 flex flex-col gap-[1.4vmin] overflow-y-auto bg-canvas px-[2.2vmin] pt-[1.6vmin] pb-[2.2vmin] lg:overflow-hidden',
         idle && 'cursor-none',
       )}
       role="region"
       aria-label="โหมดจอแสดงผลเต็มจอ"
     >
-
-      {/* Header */}
-      <header className="glass glass-strong flex shrink-0 items-center justify-between gap-4 rounded-[2.2vmin] px-[2vmin] py-[1.2vmin]">
+      {/* Header: ปุ่มควบคุมอยู่ในแถบนี้ ไม่ลอยทับข้อมูล */}
+      <header className="flex shrink-0 flex-wrap items-center justify-between gap-x-4 gap-y-2">
         <div className="flex min-w-0 items-center gap-[1.4vmin]">
-          <span className="btn-ink inline-flex size-[clamp(36px,5vmin,64px)] shrink-0 items-center justify-center rounded-full">
+          <span className="inline-flex size-[clamp(36px,5vmin,60px)] shrink-0 items-center justify-center rounded-[28%] bg-[#0071e3] text-white">
             <svg viewBox="0 0 32 32" className="size-[60%]" aria-hidden>
               <path d="M5 17h5l2.5-6 4 11 2.5-5H27" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
           </span>
           <div className="min-w-0">
-            <p className="display truncate text-[clamp(18px,2.6vmin,40px)]">{UNIT}</p>
+            <p className="apple-headline truncate text-[clamp(20px,3vmin,44px)]">{UNIT}</p>
             <p className="truncate text-[clamp(12px,1.5vmin,22px)] text-ink-2">
               {HOSPITAL} · {fmtDateLong(today)}
             </p>
           </div>
         </div>
-        <div className="flex shrink-0 items-center gap-[1.4vmin]">
-          <div className="hidden sm:block">
-            <SyncBadge onClick={() => {}} />
+        <div className="flex shrink-0 items-center gap-[1.2vmin]">
+          <div className="hidden md:block">
+            <SyncBadge />
           </div>
-          <p className="num text-[clamp(28px,5vmin,84px)] leading-none font-semibold">
-            {clock}
-            <span className="ml-1 text-[0.45em] text-ink-3">{secs}</span>
+          <p className="num text-[clamp(30px,5.4vmin,88px)] leading-none font-semibold tracking-tight">
+            <Clock seconds secondsClassName="ml-1 text-[0.42em] text-ink-3" />
           </p>
+          <div className={cx('flex items-center gap-1 transition-opacity duration-500', idle ? 'opacity-25' : 'opacity-100')}>
+            {supported && (
+              <button
+                type="button"
+                onClick={() => void (isFs ? exitFullscreen() : enterFullscreen())}
+                aria-label={isFs ? 'ย่อหน้าจอ' : 'เต็มจอ'}
+                title={isFs ? 'ย่อหน้าจอ' : 'เต็มจอ'}
+                className={cx(ctrl, 'btn-glass')}
+              >
+                {isFs ? <Minimize className="size-[42%]" /> : <Maximize className="size-[42%]" />}
+              </button>
+            )}
+            <button type="button" onClick={exit} aria-label="ออกจากโหมดจอแสดงผล" title="ออกจากโหมดจอแสดงผล (Esc)" className={cx(ctrl, 'btn-glass')}>
+              <X className="size-[46%]" strokeWidth={2.2} />
+            </button>
+          </div>
         </div>
       </header>
 
       {/* KPI row */}
-      <section className="grid shrink-0 grid-cols-2 gap-[1.2vmin] md:grid-cols-5">
-        <Kpi label="ผู้ป่วยขณะนี้" className="col-span-2 md:col-span-1">
+      <section className="grid shrink-0 grid-cols-2 gap-[1.2vmin] sm:grid-cols-3 lg:grid-cols-5">
+        <Kpi label="ผู้ป่วยขณะนี้" className="col-span-2 sm:col-span-1">
           <div className="flex items-center justify-between gap-2">
             <p>
               <Big>{occ.length}</Big>
               <span className="num ml-1 text-[clamp(16px,2.4vmin,36px)] text-ink-3">/ {total}</span>
             </p>
-            <Ring value={rate} size={Math.round(vmin * 0.085) + 20} label="อัตราครองเตียง" />
+            <Ring value={rate} size={Math.round(vmin * 0.075) + 20} label="อัตราครองเตียง" />
           </div>
         </Kpi>
         <Kpi label="เตียงว่าง">
-          <Big>{free}</Big>
+          <Big tone="var(--color-good)">{free}</Big>
           <Sub>พร้อมรับผู้ป่วย</Sub>
         </Kpi>
         <Kpi label="ทำความสะอาด">
-          <Big>{cleaning}</Big>
+          <Big tone={cleaning ? '#c98500' : undefined}>{cleaning}</Big>
           <Sub>รอเตรียมเตียง</Sub>
         </Kpi>
         <Kpi label="ใช้เครื่องช่วยหายใจ">
           <Big>{vent}</Big>
           <Sub>{occ.length ? Math.round((vent / occ.length) * 100) : 0}% ของผู้ป่วย</Sub>
         </Kpi>
-        <Kpi label="ระดับวิกฤต (Critical)">
-          <Big>{critical}</Big>
+        <Kpi label="ระดับวิกฤต (Critical)" className="sm:col-span-2 lg:col-span-1">
+          <Big tone={critical ? 'var(--color-critical)' : undefined}>{critical}</Big>
           <div className="mt-[0.8vmin] [&_li]:text-[clamp(10px,1.2vmin,16px)]">
             <AcuityBar beds={beds} />
           </div>
@@ -213,47 +201,46 @@ export function WallView({ onExit }: { onExit: () => void }) {
       </section>
 
       {/* Main */}
-      <section className="grid shrink-0 gap-[1.2vmin] lg:min-h-0 lg:flex-1 lg:shrink lg:grid-cols-[1fr_minmax(300px,30%)]">
+      <section className="grid shrink-0 gap-[1.2vmin] lg:min-h-0 lg:flex-1 lg:shrink lg:grid-cols-[1fr_minmax(340px,34%)]">
         <div className={cx('grid gap-[1.2vmin] lg:min-h-0 lg:auto-rows-fr', cols)}>
           {beds.map((b) => (
             <WallBed key={b.bedNumber} bed={b} />
           ))}
         </div>
 
-        <div className="flex flex-col gap-[1.2vmin] pb-16 lg:min-h-0 lg:pb-0">
-          {/* 12 indicators */}
-          <div className="card flex flex-col p-[1.8vmin]">
-            <PanelTitle>12 ตัวชี้วัด · วันนี้</PanelTitle>
-            <div className="grid grid-cols-3 gap-[0.8vmin]">
-              {INDICATORS.map((i) => {
-                const Icon = INDICATOR_ICON[i.key];
+        <div className="flex flex-col gap-[1.2vmin] lg:min-h-0">
+          {/* รับ-จำหน่าย */}
+          <div className="card shrink-0 p-[1.8vmin]">
+            <PanelTitle>รับ-จำหน่าย · วันนี้</PanelTitle>
+            <FlowTiles size="wall" />
+          </div>
+
+          {/* อุปกรณ์ + สถิติเตียง */}
+          <div className="card shrink-0 p-[1.8vmin]">
+            <PanelTitle>อุปกรณ์ · วันนี้</PanelTitle>
+            <div className="grid grid-cols-4 gap-[0.7vmin]">
+              {DEVICES.map((dv) => {
+                const Icon = DEVICE_ICON[dv.key];
                 return (
-                  <div key={i.key} className="well min-w-0 px-[1vmin] py-[0.7vmin]">
-                    <p className="flex items-center gap-1 truncate text-[clamp(10px,1.2vmin,16px)] text-ink-2">
-                      <Icon className="size-[1.2em] shrink-0 text-ink-3" strokeWidth={1.8} />
-                      {i.label}
+                  <div key={dv.key} className="well min-w-0 px-[0.9vmin] py-[0.6vmin]">
+                    <p className="flex items-center gap-1 truncate text-[clamp(9px,1.1vmin,15px)] text-ink-2">
+                      <Icon className="size-[1.1em] shrink-0 text-ink-3" strokeWidth={1.8} />
+                      {dv.label}
                     </p>
-                    <p className="num text-[clamp(18px,2.8vmin,40px)] leading-tight font-semibold">{todayRec[i.key]}</p>
+                    <p className="num text-[clamp(16px,2.4vmin,34px)] leading-tight font-semibold">{todayRec[dv.dailyKey]}</p>
                   </div>
                 );
               })}
             </div>
-          </div>
-
-          {/* Bed stats */}
-          <div className="card p-[1.8vmin]">
-            <PanelTitle>สถิติเตียง · {fmtMonth(ym)}</PanelTitle>
-            <div className="grid grid-cols-5 gap-[0.8vmin]">
+            <p className="num mt-[1vmin] flex flex-wrap gap-x-[1.4vmin] gap-y-1 text-[clamp(10px,1.25vmin,17px)] text-ink-3">
               {STAT_DEFS.map((s) => (
-                <div key={s.key} className="well min-w-0 px-[0.8vmin] py-[0.7vmin] text-center">
-                  <p className="text-[clamp(10px,1.2vmin,16px)] font-semibold text-ink-2">{s.label}</p>
-                  <p className="num truncate text-[clamp(14px,2.1vmin,30px)] leading-tight font-semibold">
-                    {s.key === 'bor' ? Math.round(st.values.bor) : st.values[s.key] >= 10 ? st.values[s.key].toFixed(1) : fmtStat(st.values[s.key])}
-                  </p>
-                  <p className="truncate text-[clamp(9px,1vmin,14px)] text-ink-3">{s.unit}</p>
-                </div>
+                <span key={s.key}>
+                  <span className="font-semibold text-ink-2">{s.label}</span>{' '}
+                  {s.key === 'bor' ? `${Math.round(st.values.bor)}%` : fmtStat(st.values[s.key])}
+                </span>
               ))}
-            </div>
+              <span>· {fmtMonth(ym)}</span>
+            </p>
           </div>
 
           {/* ทีมเวรนี้ (ถ้ามีตารางเวร) แทนความเคลื่อนไหวล่าสุด */}
@@ -262,61 +249,34 @@ export function WallView({ onExit }: { onExit: () => void }) {
               <DutyCard compact />
             </div>
           ) : (
-          <div className="card flex flex-col overflow-hidden p-[1.8vmin] lg:min-h-0 lg:flex-1">
-            <PanelTitle>ความเคลื่อนไหวล่าสุด</PanelTitle>
-            {recent.length === 0 ? (
-              <p className="text-[clamp(12px,1.4vmin,18px)] text-ink-3">ยังไม่มีรายการ</p>
-            ) : (
-              <ol className="min-h-0 space-y-[0.9vmin] overflow-hidden">
-                {recent.map((l, i) => {
-                  const Icon = EVENT_ICON[l.event];
-                  return (
-                    <li key={`${l.timestamp}-${i}`} className="flex items-center gap-[1vmin]">
-                      <span className={cx('icon-chip size-[clamp(26px,3.4vmin,46px)] shrink-0 rounded-full', l.event === 'admit' && 'text-accent')}>
-                        <Icon className="size-[50%]" strokeWidth={1.8} />
-                      </span>
-                      <div className="min-w-0">
-                        <p className="truncate text-[clamp(12px,1.5vmin,20px)]">
-                          {EVENT_META[l.event].label} <span className="num text-ink-2">· {l.bedNumber}</span>
-                        </p>
-                        <p className="truncate text-[clamp(10px,1.2vmin,16px)] text-ink-3">{fmtDateTime(l.timestamp)}</p>
-                      </div>
-                    </li>
-                  );
-                })}
-              </ol>
-            )}
-          </div>
+            <div className="card flex flex-col overflow-hidden p-[1.8vmin] lg:min-h-0 lg:flex-1">
+              <PanelTitle>ความเคลื่อนไหวล่าสุด</PanelTitle>
+              {recent.length === 0 ? (
+                <p className="text-[clamp(12px,1.4vmin,18px)] text-ink-3">ยังไม่มีรายการ</p>
+              ) : (
+                <ol className="min-h-0 space-y-[0.9vmin] overflow-hidden">
+                  {recent.map((l, i) => {
+                    const Icon = EVENT_ICON[l.event];
+                    return (
+                      <li key={`${l.timestamp}-${i}`} className="flex items-center gap-[1vmin]">
+                        <span className={cx('icon-chip size-[clamp(26px,3.4vmin,46px)] shrink-0 rounded-full', l.event === 'admit' && 'text-accent')}>
+                          <Icon className="size-[50%]" strokeWidth={1.8} />
+                        </span>
+                        <div className="min-w-0">
+                          <p className="truncate text-[clamp(12px,1.5vmin,20px)]">
+                            {EVENT_META[l.event].label} <span className="num text-ink-2">· {l.bedNumber}</span>
+                          </p>
+                          <p className="truncate text-[clamp(10px,1.2vmin,16px)] text-ink-3">{fmtDateTime(l.timestamp)}</p>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ol>
+              )}
+            </div>
           )}
         </div>
       </section>
-
-      {/* Floating controls (fade out when idle) */}
-      <div
-        className={cx(
-          'fixed right-[2vmin] bottom-[2vmin] z-10 flex gap-2 transition-opacity duration-500',
-          idle ? 'pointer-events-none opacity-0' : 'opacity-100',
-        )}
-      >
-        {supported && (
-          <button
-            type="button"
-            onClick={() => void (isFs ? exitFullscreen() : enterFullscreen())}
-            className="btn-glass inline-flex h-11 items-center gap-2 rounded-full px-5 text-[14px] font-medium"
-          >
-            {isFs ? <Minimize className="size-4" /> : <Maximize className="size-4" />}
-            {isFs ? 'ย่อหน้าจอ' : 'เต็มจอ'}
-          </button>
-        )}
-        <button
-          type="button"
-          onClick={exit}
-          className="btn-ink inline-flex h-11 items-center gap-2 rounded-full px-5 text-[14px] font-medium"
-        >
-          <X className="size-4" />
-          ออกจากโหมดนี้
-        </button>
-      </div>
     </div>
   );
 }
@@ -330,8 +290,10 @@ function Kpi({ label, children, className }: { label: string; children: ReactNod
   );
 }
 
-const Big = ({ children }: { children: ReactNode }) => (
-  <span className="num text-[clamp(34px,6vmin,96px)] leading-none font-semibold">{children}</span>
+const Big = ({ children, tone }: { children: ReactNode; tone?: string }) => (
+  <span className="num text-[clamp(34px,6vmin,96px)] leading-none font-semibold" style={tone ? { color: tone } : undefined}>
+    {children}
+  </span>
 );
 const Sub = ({ children }: { children: ReactNode }) => (
   <p className="mt-[0.6vmin] text-[clamp(11px,1.3vmin,18px)] text-ink-3">{children}</p>
