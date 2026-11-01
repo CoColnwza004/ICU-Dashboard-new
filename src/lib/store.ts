@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { IcuData, SheetMeta, SheetOp, SyncState } from '../types';
 import { initialData, normalizeData, upgradeLocalData, type ActionResult } from './logic';
-import { DEFAULT_SHEETS_API_URL } from '../config';
+import { DEFAULT_SHEETS_API_URL, LEGACY_SHEETS_API_URLS } from '../config';
 import { ApiError, changePin as apiChangePin, fetchSnapshot, postOps, verifyPin, type SheetConfig, type Snapshot } from './sheetApi';
 
 const CONFIG_KEY = 'icu.sheet.config.v2';
@@ -85,7 +85,9 @@ export interface Notice {
 export function useIcuStore() {
   const [config, setConfigState] = useState<SheetConfig>(() => {
     const saved = read(CONFIG_KEY, ENV_CONFIG);
-    return saved.url ? saved : ENV_CONFIG; // ไม่มีลิงก์ที่บันทึกไว้ในเครื่อง → ใช้ชีตหลักของระบบอัตโนมัติ
+    // ไม่มีลิงก์ที่บันทึกไว้ในเครื่อง หรือเป็นลิงก์ชุดเก่า → ใช้ชีตหลักของระบบอัตโนมัติ
+    if (!saved.url || LEGACY_SHEETS_API_URLS.includes(saved.url.trim())) return ENV_CONFIG;
+    return saved;
   });
   const [data, setData] = useState<IcuData>(() => {
     const stored = read<Partial<IcuData>>(DATA_KEY, initialData());

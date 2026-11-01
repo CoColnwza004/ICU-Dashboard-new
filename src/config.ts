@@ -5,3 +5,8 @@
  */
 export const DEFAULT_SHEETS_API_URL =
   'https://script.google.com/macros/s/AKfycbwo7lTwrhMA02xmEXGGi7VLMaie5rdFhcpZspK-bqcm1O2LPteaAnkftuytOAC-GfUr/exec';
+
+/** ลิงก์ชุดเก่าที่เคยใช้ — เครื่องที่บันทึกลิงก์เหล่านี้ไว้จะเปลี่ยนไปใช้ลิงก์ปัจจุบันให้เอง */
+export const LEGACY_SHEETS_API_URLS = [
+  'https://script.google.com/macros/s/AKfycbywe8qltl6iKiA8Gz_JV-R7VVaZ7KJEQ_v2Y_GPZ1r2VRRZkQCqYL5jIFtEYXQCghHg/exec',
+];
