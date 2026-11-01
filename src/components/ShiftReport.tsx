@@ -1,13 +1,14 @@
 import { FileDown, ImageDown } from 'lucide-react';
-import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import type { Bed } from '../types';
+import type { Bed, DailyKey, IcuData } from '../types';
 import { ACUITY_META, DEVICES, HOSPITAL, STATUS_META, UNIT } from '../lib/constants';
-import { daysBetween, fmtDateLong, fmtMonth } from '../lib/date';
+import { daysBetween, fmtDateLong, fmtMonth, parseLocalDateTime } from '../lib/date';
 import { DEVICE_ICON, EVENT_ICON } from '../lib/icons';
-import { countsFromBeds, flowBetween, flowCounts, occupied } from '../lib/logic';
+import { bedsAt, countsFromBeds, findDaily, flowBetween, flowCounts, normalizeBed, occupied } from '../lib/logic';
+import { fetchShift, type ShiftRow } from '../lib/sheetApi';
 import { exportPdf, exportPng } from '../lib/pdf';
-import { isNurse, ratioText, realName, shiftWindow, teamOn } from '../lib/roster';
+import { isNurse, ratioText, realName, SHIFTS, shiftWindow, shiftWindowFor, teamOn, type ShiftKey } from '../lib/roster';
 import { fmtStat, STAT_DEFS, statsFor } from '../lib/stats';
 import { useStore } from '../lib/store';
 import { Button, cx, Modal, Segmented, Switch } from './ui';
@@ -39,10 +40,50 @@ const writeAuto = (v: ReportFormat | 'off') => {
   }
 };
 
-export const reportFilename = (at: Date, format: ReportFormat) => {
-  const w = shiftWindow(at);
-  const name = { M: 'morning', A: 'evening', N: 'night' }[w.def.key];
-  return `ICU-shift-report-${w.date}-${name}.${format}`;
+export const reportFilename = (src: Pick<ReportSource, 'date' | 'shift'>, format: ReportFormat) => {
+  const name = { M: 'morning', A: 'evening', N: 'night' }[src.shift];
+  return `ICU-shift-report-${src.date}-${name}.${format}`;
+};
+
+/* ------------------------------------------------------------------ */
+/* ที่มาของข้อมูลรายงาน: สด (เวรนี้) · บันทึกรายชั่วโมงจากชีต · ประมาณการย้อนหลัง */
+/* ------------------------------------------------------------------ */
+
+export interface ReportSource {
+  date: string;
+  shift: ShiftKey;
+  /** เวลาของข้อมูลเตียง */
+  at: Date;
+  beds: Bed[];
+  devices: Partial<Record<DailyKey, number>>;
+  mode: 'live' | 'snapshot' | 'reconstructed';
+}
+
+/** เวรปัจจุบัน: ใช้ข้อมูลสด */
+export const liveSource = (data: IcuData, now = new Date()): ReportSource => {
+  const w = shiftWindow(now);
+  return { date: w.date, shift: w.def.key, at: now, beds: data.beds, devices: countsFromBeds(data.beds), mode: 'live' };
+};
+
+/** เวรที่ผ่านมาแล้ว: ใช้สถานะเตียงที่ชีตบันทึกไว้ (ถ้ามี) ไม่เช่นนั้นย้อนจากทะเบียนรับ-จำหน่าย */
+export const pastSource = (data: IcuData, date: string, shift: ShiftKey, snap?: ShiftRow | null): ReportSource => {
+  const w = shiftWindowFor(date, shift);
+  if (snap?.beds) {
+    try {
+      const rows = JSON.parse(snap.beds) as Record<string, unknown>[];
+      const beds = rows.map(normalizeBed).filter((b) => b.bedNumber);
+      if (beds.length) {
+        const at = parseLocalDateTime(String(snap.savedAt).replace(' ', 'T')) ?? w.endAt;
+        return { date, shift, at, beds, devices: countsFromBeds(beds), mode: 'snapshot' };
+      }
+    } catch {
+      /* ข้อมูลเสีย → ประมาณการแทน */
+    }
+  }
+  const beds = bedsAt(data, w.end);
+  const daily = findDaily(data.daily, date);
+  const devices = daily ? Object.fromEntries(DEVICES.map((d) => [d.dailyKey, daily[d.dailyKey]])) : countsFromBeds(beds);
+  return { date, shift, at: w.endAt, beds, devices, mode: 'reconstructed' };
 };
 
 /** รายงานเป็นโทนสว่างเสมอ (แม้หน้าเว็บจะเป็นโหมดมืด) */
@@ -72,10 +113,10 @@ const FLOW_ROWS = [
   { key: 'expired', label: 'เสียชีวิต', tone: '#48484a' },
 ] as const;
 
-export function ShiftReport({ at }: { at: Date }) {
+export function ShiftReport({ src }: { src: ReportSource }) {
   const { data } = useStore();
-  const w = shiftWindow(at);
-  const beds = data.beds;
+  const w = shiftWindowFor(src.date, src.shift);
+  const beds = src.beds;
   const occ = occupied(beds);
   const free = beds.filter((b) => b.status === 'available').length;
   const cleaning = beds.filter((b) => b.status === 'cleaning').length;
@@ -85,11 +126,15 @@ export function ShiftReport({ at }: { at: Date }) {
   const shiftFlow = flowBetween(data, w.start, w.end);
   const dayFlow = flowCounts(data, w.date);
   const monthFlow = flowCounts(data, w.date.slice(0, 7));
-  const devices = countsFromBeds(beds);
+  const devices = src.devices;
   const st = statsFor(data, w.date.slice(0, 7));
   const team = teamOn(data, w.date, w.def.key);
   const nurses = team.filter(isNurse).length;
-  const time = at.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
+  const time =
+    src.mode === 'reconstructed'
+      ? `${String(w.def.end).padStart(2, '0')}:00`
+      : src.at.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
+  const timeLabel = src.mode === 'reconstructed' ? 'ข้อมูล ณ สิ้นเวร' : src.mode === 'snapshot' ? 'บันทึกจากระบบเมื่อ' : 'ข้อมูล ณ เวลา';
 
   return (
     <div style={LIGHT} className="px-7 py-5">
@@ -108,18 +153,28 @@ export function ShiftReport({ at }: { at: Date }) {
             <h1 className="text-[26px] leading-tight font-semibold tracking-tight">
               รายงานประจำ{w.def.label} · {w.def.time} น.
             </h1>
-            <p className="text-[14px] text-[#48484a]">{fmtDateLong(w.date)}</p>
+            <p className="text-[14px] text-[#48484a]">
+              {fmtDateLong(w.date)}
+              {src.mode === 'reconstructed' && (
+                <span className="ml-2 rounded-full bg-[#fff4d6] px-2 py-0.5 text-[11px] font-medium text-[#8a5c00]">
+                  ย้อนหลัง · ประมาณการจากทะเบียนรับ-จำหน่าย · อุปกรณ์จากบันทึกรายวัน
+                </span>
+              )}
+              {src.mode === 'snapshot' && (
+                <span className="ml-2 rounded-full bg-[#e8f3ff] px-2 py-0.5 text-[11px] font-medium text-[#0059b3]">ย้อนหลัง · จากบันทึกสถานะเตียงรายชั่วโมง</span>
+              )}
+            </p>
           </div>
         </div>
         <div className="text-right">
-          <p className="text-[12px] text-[#6e6e73]">ข้อมูล ณ เวลา</p>
+          <p className="text-[12px] text-[#6e6e73]">{timeLabel}</p>
           <p className="num text-[30px] leading-none font-semibold">{time}</p>
         </div>
       </header>
 
       {/* ตัวเลขหลัก */}
       <section className="mt-3 grid grid-cols-5 gap-3">
-        <Kpi label="ผู้ป่วยขณะนี้" value={`${occ.length}/${beds.length}`} sub={`ครองเตียง ${rate}%`} />
+        <Kpi label={src.mode === 'live' ? 'ผู้ป่วยขณะนี้' : 'ผู้ป่วย'} value={`${occ.length}/${beds.length}`} sub={`ครองเตียง ${rate}%`} />
         <Kpi label="เตียงว่าง" value={free} tone="#0ca30c" sub="พร้อมรับผู้ป่วย" />
         <Kpi label="ทำความสะอาด" value={cleaning} tone={cleaning ? '#b07d00' : undefined} sub="รอเตรียมเตียง" />
         <Kpi label="ใช้เครื่องช่วยหายใจ" value={vent} sub={`${occ.length ? Math.round((vent / occ.length) * 100) : 0}% ของผู้ป่วย`} />
@@ -170,7 +225,7 @@ export function ShiftReport({ at }: { at: Date }) {
           })}
         </div>
             {/* อุปกรณ์ */}
-          <Panel title="อุปกรณ์ · ณ เวลารายงาน">
+          <Panel title={src.mode === 'reconstructed' ? 'อุปกรณ์ · บันทึกรายวัน' : 'อุปกรณ์ · ณ เวลารายงาน'}>
             <div className="grid grid-cols-8 gap-1.5">
               {DEVICES.map((d) => {
                 const Icon = DEVICE_ICON[d.key];
@@ -254,7 +309,7 @@ export function ShiftReport({ at }: { at: Date }) {
       <footer className="mt-3 flex justify-between border-t border-black/10 pt-2 text-[10.5px] text-[#6e6e73]">
         <span>ICU Smart Center · ข้อมูลไม่ระบุตัวตนผู้ป่วย</span>
         <span>
-          สร้างเมื่อ {at.toLocaleString('th-TH', { dateStyle: 'medium', timeStyle: 'short' })} น. · ★ หัวหน้าเวร
+          สร้างเมื่อ {new Date().toLocaleString('th-TH', { dateStyle: 'medium', timeStyle: 'short' })} น. · ★ หัวหน้าเวร
         </span>
       </footer>
     </div>
@@ -289,7 +344,7 @@ function Panel({ title, right, children }: { title: string; right?: string; chil
 /* สร้างไฟล์นอกจอ แล้วดาวน์โหลด                                            */
 /* ------------------------------------------------------------------ */
 
-export function ShiftReportExporter({ format, at, onDone }: { format: ReportFormat; at: Date; onDone: (ok: boolean, error?: string) => void }) {
+export function ShiftReportExporter({ format, src, onDone }: { format: ReportFormat; src: ReportSource; onDone: (ok: boolean, error?: string) => void }) {
   const ref = useRef<HTMLDivElement>(null);
   const started = useRef(false);
   useEffect(() => {
@@ -298,7 +353,7 @@ export function ShiftReportExporter({ format, at, onDone }: { format: ReportForm
     const run = async () => {
       await new Promise((r) => window.setTimeout(r, 200));
       try {
-        const name = reportFilename(at, format);
+        const name = reportFilename(src, format);
         if (format === 'png') await exportPng(ref.current!, name);
         else await exportPdf(ref.current!, name, true, { onePage: true });
         onDone(true);
@@ -308,11 +363,11 @@ export function ShiftReportExporter({ format, at, onDone }: { format: ReportForm
       }
     };
     void run();
-  }, [at, format, onDone]);
+  }, [src, format, onDone]);
   return createPortal(
     <div aria-hidden style={{ position: 'fixed', left: -12000, top: 0, width: REPORT_W, pointerEvents: 'none' }}>
       <div ref={ref}>
-        <ShiftReport at={at} />
+        <ShiftReport src={src} />
       </div>
     </div>,
     document.body,
@@ -347,28 +402,61 @@ function ScaledPreview({ children }: { children: ReactNode }) {
   );
 }
 
-/** หน้าต่างดาวน์โหลดรายงานประจำเวร: ดูตัวอย่าง · PNG / PDF · ตั้งบันทึกอัตโนมัติ */
+/** หน้าต่างดาวน์โหลดรายงานประจำเวร: เลือกวัน/เวร (ย้อนหลังได้) · ดูตัวอย่าง · PNG / PDF · ตั้งบันทึกอัตโนมัติ */
 export function ShiftReportDialog({ open, onClose, onWall }: { open: boolean; onClose: () => void; onWall?: boolean }) {
-  const { toast } = useStore();
-  const [at, setAt] = useState(() => new Date());
+  const { data, toast, config } = useStore();
+  const [now, setNow] = useState(() => new Date());
+  const current = shiftWindow(now);
+  const [date, setDate] = useState(current.date);
+  const [shift, setShift] = useState<ShiftKey>(current.def.key);
+  const [snap, setSnap] = useState<{ key: string; row: ShiftRow | null | undefined } | null>(null);
   const [job, setJob] = useState<ReportFormat | null>(null);
   const [auto, setAuto] = useState<ReportFormat | 'off'>(readAuto);
   const [autoFmt, setAutoFmt] = useState<ReportFormat>(() => (readAuto() === 'png' ? 'png' : 'pdf'));
 
   useEffect(() => {
     if (!open) return;
-    setAt(new Date());
+    const n = new Date();
+    const w = shiftWindow(n);
+    setNow(n);
+    setDate(w.date);
+    setShift(w.def.key);
     setAuto(readAuto());
-    const t = window.setInterval(() => setAt(new Date()), 30_000);
+    const t = window.setInterval(() => setNow(new Date()), 30_000);
     return () => window.clearInterval(t);
   }, [open]);
 
-  const w = shiftWindow(at);
+  const w = shiftWindowFor(date, shift);
+  const isCurrent = w.key === current.key;
+  const isFuture = !isCurrent && w.startAt.getTime() > now.getTime();
+
+  // เวรที่ผ่านมา: ขอสถานะเตียงที่บันทึกไว้จากชีต (ถ้าสคริปต์รองรับ)
+  useEffect(() => {
+    if (!open || isCurrent || isFuture || !config.url) return;
+    if (snap?.key === w.key) return;
+    let cancelled = false;
+    setSnap({ key: w.key, row: undefined });
+    fetchShift(config, w.key)
+      .then((row) => !cancelled && setSnap({ key: w.key, row }))
+      .catch(() => !cancelled && setSnap({ key: w.key, row: undefined }));
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, w.key, isCurrent, isFuture, config.url]);
+
+  const src = useMemo<ReportSource | null>(() => {
+    if (isFuture) return null;
+    if (isCurrent) return liveSource(data, now);
+    return pastSource(data, date, shift, snap?.key === w.key ? snap.row : undefined);
+  }, [data, now, date, shift, isCurrent, isFuture, snap, w.key]);
+
   const setAutoMode = (on: boolean, fmt = autoFmt) => {
     const v = on ? fmt : 'off';
     setAuto(v);
     writeAuto(v);
   };
+  const today = current.date;
 
   return (
     <Modal
@@ -376,14 +464,14 @@ export function ShiftReportDialog({ open, onClose, onWall }: { open: boolean; on
       onClose={onClose}
       width="max-w-4xl"
       title="รายงานประจำเวร"
-      subtitle={`${w.def.label} ${w.def.time} น. · ${fmtDateLong(w.date)} · เนื้อหาเดียวกับโหมดเต็มจอ`}
+      subtitle={`${w.def.label} ${w.def.time} น. · ${fmtDateLong(date)}${isCurrent ? ' · เวรปัจจุบัน' : ' · ย้อนหลัง'}`}
       footer={
         <>
-          <Button variant="secondary" disabled={!!job} onClick={() => setJob('png')}>
+          <Button variant="secondary" disabled={!!job || !src} onClick={() => setJob('png')}>
             <ImageDown className="size-4" strokeWidth={1.8} />
             {job === 'png' ? 'กำลังสร้าง…' : 'ดาวน์โหลดรูปภาพ (PNG)'}
           </Button>
-          <Button variant="primary" disabled={!!job} onClick={() => setJob('pdf')}>
+          <Button variant="primary" disabled={!!job || !src} onClick={() => setJob('pdf')}>
             <FileDown className="size-4" strokeWidth={1.8} />
             {job === 'pdf' ? 'กำลังสร้าง…' : 'ดาวน์โหลด PDF'}
           </Button>
@@ -391,9 +479,58 @@ export function ShiftReportDialog({ open, onClose, onWall }: { open: boolean; on
       }
     >
       <div className="space-y-5">
-        <ScaledPreview>
-          <ShiftReport at={at} />
-        </ScaledPreview>
+        {/* เลือกวันและเวร */}
+        <div className="flex flex-wrap items-center gap-3">
+          <label className="flex items-center gap-2 text-[13px] text-ink-2">
+            วันที่
+            <input
+              type="date"
+              className="field h-9 w-auto py-0"
+              value={date}
+              max={today}
+              aria-label="วันที่ของเวร"
+              onChange={(e) => e.target.value && setDate(e.target.value > today ? today : e.target.value)}
+            />
+          </label>
+          <Segmented<ShiftKey>
+            size="sm"
+            value={shift}
+            onChange={setShift}
+            label="เลือกเวร"
+            options={SHIFTS.map((x) => ({ value: x.key, label: `${x.label.replace('เวร', '')} ${x.time}` }))}
+          />
+          {!isCurrent && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setDate(current.date);
+                setShift(current.def.key);
+              }}
+            >
+              กลับไปเวรปัจจุบัน
+            </Button>
+          )}
+        </div>
+
+        {isFuture ? (
+          <div className="well px-5 py-10 text-center text-[14px] text-ink-2">ยังไม่ถึงเวรนี้ — เลือกเวรปัจจุบันหรือเวรที่ผ่านมาแล้ว</div>
+        ) : (
+          src && (
+            <>
+              <ScaledPreview>
+                <ShiftReport src={src} />
+              </ScaledPreview>
+              {src.mode === 'reconstructed' && (
+                <p className="text-[12px] leading-relaxed text-ink-3">
+                  {snap?.key === w.key && snap.row === undefined && config.url ? 'กำลังค้นข้อมูลที่บันทึกไว้… · ' : ''}
+                  รายงานย้อนหลังนี้ประมาณการสถานะเตียงจากทะเบียนรับ-จำหน่าย และใช้ยอดอุปกรณ์จากบันทึกรายวัน — ถ้าต้องการข้อมูลตรงตามจริง
+                  ให้เจ้าของชีตเลือกเมนู <b>ICU Smart Center › เปิดบันทึกสถานะเตียงทุกชั่วโมง</b> (ครั้งเดียว) แล้วเวรถัด ๆ ไปจะมีข้อมูลจริง
+                </p>
+              )}
+            </>
+          )
+        )}
 
         <div className="well px-4">
           <Switch
@@ -427,13 +564,13 @@ export function ShiftReportDialog({ open, onClose, onWall }: { open: boolean; on
         </div>
       </div>
 
-      {job && (
+      {job && src && (
         <ShiftReportExporter
           format={job}
-          at={at}
+          src={src}
           onDone={(ok, err) => {
             setJob(null);
-            if (ok) toast(job === 'png' ? 'บันทึกรูปภาพรายงานแล้ว' : 'บันทึกไฟล์ PDF แล้ว', 'default', reportFilename(at, job));
+            if (ok) toast(job === 'png' ? 'บันทึกรูปภาพรายงานแล้ว' : 'บันทึกไฟล์ PDF แล้ว', 'default', reportFilename(src, job));
             else toast('สร้างรายงานไม่สำเร็จ', 'error', err);
           }}
         />

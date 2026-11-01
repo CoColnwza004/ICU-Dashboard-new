@@ -557,6 +557,42 @@ export const monthlySummary = (data: IcuData, ym: string) => {
   };
 };
 
+/**
+ * สถานะเตียง ณ เวลา end (ย้อนหลัง) — เริ่มจากสถานะปัจจุบัน แล้วย้อนเหตุการณ์ในทะเบียนที่เกิดหลัง end ทีละรายการ
+ * (ผู้ป่วยที่ยังอยู่จะคงข้อมูลอุปกรณ์ปัจจุบันไว้ · ผู้ป่วยที่ถูกคืนจากทะเบียนจะไม่มีข้อมูลอุปกรณ์)
+ */
+export const bedsAt = (data: IcuData, end: string): Bed[] => {
+  const state = new Map(data.beds.map((b) => [b.bedNumber, { ...b }]));
+  const ts = (t: string) => t.replace(' ', 'T');
+  const later = data.logs.filter((l) => ts(l.timestamp) >= end).sort((a, b) => ts(b.timestamp).localeCompare(ts(a.timestamp)));
+  const patient = (bedNumber: string, l: LogEntry): Bed => ({
+    ...emptyBed(bedNumber),
+    status: 'occupied',
+    caseCode: l.caseCode,
+    acuity: toAcuity(l.acuity),
+    admittedAt: l.admittedAt,
+    updatedAt: l.timestamp,
+  });
+  later.forEach((l) => {
+    if (l.event === 'admit') {
+      // ก่อนรับเข้า เตียงนี้ยังว่าง
+      state.set(l.bedNumber, { ...emptyBed(l.bedNumber), status: 'available' });
+    } else if (l.event === 'move') {
+      const m = l.note.match(/ย้ายจาก\s*(\S+)\s*→\s*(\S+)/);
+      const from = m?.[1];
+      const cur = state.get(l.bedNumber);
+      state.set(l.bedNumber, { ...emptyBed(l.bedNumber), status: 'available' });
+      if (from && state.has(from)) {
+        state.set(from, cur && cur.status === 'occupied' && cur.caseCode === l.caseCode ? { ...cur, bedNumber: from } : patient(from, l));
+      }
+    } else if (EVENT_META[l.event]?.out) {
+      // ก่อนจำหน่าย ผู้ป่วยยังอยู่ที่เตียงนี้
+      state.set(l.bedNumber, patient(l.bedNumber, l));
+    }
+  });
+  return data.beds.map((b) => state.get(b.bedNumber)!);
+};
+
 /** ยอดรับ-จำหน่ายจากทะเบียน (Log) ในช่วงเวลา [start, end) · เวลาเป็นข้อความ 'yyyy-MM-ddTHH:mm' */
 export const flowBetween = (data: IcuData, start: string, end: string) => {
   const c = { admit: 0, home: 0, ward: 0, refer: 0, expired: 0 };

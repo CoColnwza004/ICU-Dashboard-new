@@ -181,18 +181,22 @@ export const shortName = (s: { name: string; nickname?: string } | null, fallbac
 
 const pad2 = (n: number) => String(n).padStart(2, '0');
 
-/** ช่วงเวลาของเวร (8 ชั่วโมง) ที่ครอบคลุมเวลา now · end เป็นเวลาสิ้นสุด (ไม่รวม) */
-export const shiftWindow = (now = new Date()) => {
-  const def = SHIFT_BY_KEY[shiftAt(now)];
-  const date = `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())}`;
-  const endAt = new Date(now.getFullYear(), now.getMonth(), now.getDate(), def.end, 0, 0);
+/** ช่วงเวลาของเวร date + shift · end เป็นเวลาสิ้นสุด (ไม่รวม) */
+export const shiftWindowFor = (date: string, key: ShiftKey) => {
+  const def = SHIFT_BY_KEY[key];
+  const [y, m, d] = date.split('-').map(Number);
   return {
     def,
     date,
     start: `${date}T${pad2(def.start)}:00`,
     end: `${date}T${pad2(def.end)}:00`,
-    endAt,
-    /** ใช้กันบันทึกซ้ำ เช่น 2026-11-01-M */
+    startAt: new Date(y, m - 1, d, def.start, 0, 0),
+    endAt: new Date(y, m - 1, d, def.end, 0, 0),
+    /** ใช้กันบันทึกซ้ำ / ค้นข้อมูลที่บันทึกไว้ เช่น 2026-11-01-M */
     key: `${date}-${def.key}`,
   };
 };
+
+/** เวร (8 ชั่วโมง) ที่ครอบคลุมเวลา now */
+export const shiftWindow = (now = new Date()) =>
+  shiftWindowFor(`${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())}`, shiftAt(now));

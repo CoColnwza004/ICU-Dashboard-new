@@ -72,6 +72,25 @@ export async function fetchSnapshot(cfg: SheetConfig, parts?: 'core', signal?: A
   return readJson(await fetch(u, { signal, cache: 'no-store', redirect: 'follow' }));
 }
 
+/** แถวสถานะเตียงที่บันทึกรายชั่วโมงของเวรหนึ่ง (แท็บ ShiftReports) */
+export interface ShiftRow {
+  key: string;
+  date: string;
+  shift: string;
+  savedAt: string;
+  beds: string;
+}
+
+/** null = ไม่มีข้อมูลของเวรนั้น · undefined = สคริปต์ยังเป็นเวอร์ชันเก่า (ไม่รองรับ) */
+export async function fetchShift(cfg: SheetConfig, key: string): Promise<ShiftRow | null | undefined> {
+  const u = new URL(cfg.url.trim());
+  if (cfg.token) u.searchParams.set('token', cfg.token);
+  u.searchParams.set('shift', key);
+  u.searchParams.set('_', String(Date.now()));
+  const body = (await readJson(await fetch(u, { cache: 'no-store', redirect: 'follow' }))) as unknown as { shift?: ShiftRow | null };
+  return 'shift' in body ? (body.shift ?? null) : undefined;
+}
+
 /** text/plain = "simple request" ไม่มี CORS preflight (Apps Script ไม่รองรับ OPTIONS) */
 async function post(cfg: SheetConfig, body: Record<string, unknown>): Promise<Snapshot> {
   return readJson(

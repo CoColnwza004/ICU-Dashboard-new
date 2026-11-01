@@ -33,7 +33,7 @@ const API_TOKEN = '';
 
 const TAB = {
   beds: 'Beds', daily: 'Daily', log: 'Log', stats: 'Stats', staff: 'Staff', roster: 'Roster', docs: 'Docs',
-  news: 'News', kpi: 'KPI', kpiData: 'KPIData', links: 'Links',
+  news: 'News', kpi: 'KPI', kpiData: 'KPIData', links: 'Links', shifts: 'ShiftReports',
 };
 
 // รหัสเจ้าหน้าที่: เก็บเฉพาะค่า hash ใน Script Properties (ตั้งจากเมนูในชีต)
@@ -161,6 +161,11 @@ const LINK_COLS = ['id', 'title', 'description', 'url', 'category', 'order', 'ac
 const LINK_HEAD = ['รหัส', 'ชื่อแบบฟอร์ม', 'คำอธิบาย', 'ลิงก์ Google Forms', 'หมวด', 'ลำดับ', 'สถานะ'];
 const LINK_CATEGORIES = ['แบบประเมิน', 'รายงานอุบัติการณ์', 'ลงทะเบียน', 'อื่นๆ'];
 
+// สถานะเตียงทุกชั่วโมง (ใช้ทำรายงานประจำเวรย้อนหลังได้ตรงตามจริง) — 1 แถว = 1 เวร (เขียนทับทุกชั่วโมงจนจบเวร)
+const SHIFT_COLS = ['key', 'date', 'shift', 'savedAt', 'beds'];
+const SHIFT_HEAD = ['รหัสเวร', 'วันที่', 'เวร', 'บันทึกล่าสุด', 'สถานะเตียง (JSON)'];
+const SHIFT_TH = { M: 'เวรเช้า', A: 'เวรบ่าย', N: 'เวรดึก' };
+
 /** ช่องที่เป็นวันที่อย่างเดียว (ไม่มีเวลา) */
 const DATE_ONLY = { date: true, effectiveDate: true, reviewDate: true };
 
@@ -168,7 +173,7 @@ const STATUS_TH = { available: 'ว่าง', occupied: 'มีผู้ป่�
 const EVENT_TH = {
   admit: 'รับเข้า', home: 'จำหน่ายกลับบ้าน', ward: 'ย้ายวอร์ด', refer: 'ส่งต่อ (Refer)', expired: 'เสียชีวิต', move: 'ย้ายเตียง',
 };
-const DATETIME_FIELDS = { admittedAt: true, updatedAt: true, timestamp: true };
+const DATETIME_FIELDS = { admittedAt: true, updatedAt: true, timestamp: true, savedAt: true };
 
 /* ------------------------------------------------------------------ */
 /* Web app entry points                                                */
@@ -178,6 +183,8 @@ function doGet(e) {
   return respond_(function () {
     checkToken_(e && e.parameter && e.parameter.token);
     ensureSetup_();
+    // ?shift=2026-11-01-M → สถานะเตียงที่บันทึกไว้ของเวรนั้น (รายงานย้อนหลัง)
+    if (e && e.parameter && e.parameter.shift) return { shift: readShift_(String(e.parameter.shift)) };
     // ผู้เข้าชมทั่วไป: อ่านได้อย่างเดียว ไม่ส่งลิงก์ชีตออกไป
     return snapshot_(e && e.parameter && e.parameter.parts, false);
   });
@@ -292,6 +299,8 @@ function onOpen() {
     .addItem('ตั้ง / เปลี่ยนรหัสเจ้าหน้าที่', 'promptStaffPin')
     .addItem('ปลดล็อกรหัส (ใส่ผิดหลายครั้ง)', 'unlockStaffPin')
     .addSeparator()
+    .addItem('เปิดบันทึกสถานะเตียงทุกชั่วโมง (รายงานเวรย้อนหลัง)', 'enableShiftSnapshots')
+    .addSeparator()
     .addItem('ตั้งค่า / ซ่อมแซมแท็บ', 'setup')
     .addToUi();
 }
@@ -322,6 +331,7 @@ function ensureSetup_(force) {
     kpi: !!ss.getSheetByName(TAB.kpi),
     kpiData: !!ss.getSheetByName(TAB.kpiData),
     links: !!ss.getSheetByName(TAB.links),
+    shifts: !!ss.getSheetByName(TAB.shifts),
   };
   const all = Object.keys(existed).every(function (k) { return existed[k]; });
   if (!force && all) return;
@@ -337,6 +347,7 @@ function ensureSetup_(force) {
   const kpi = sheet_(TAB.kpi, KPI_HEAD);
   const kpiData = sheet_(TAB.kpiData, KPI_DATA_HEAD);
   const links = sheet_(TAB.links, LINK_HEAD);
+  const shifts = sheet_(TAB.shifts, SHIFT_HEAD);
 
   if (beds.getLastRow() < 2) {
     const now = new Date();
@@ -446,8 +457,13 @@ function ensureSetup_(force) {
   links.setColumnWidth(2, 240);
   links.setColumnWidth(4, 320);
 
+  shifts.getRange('A2:A').setNumberFormat('@');
+  shifts.getRange('B2:B').setNumberFormat('yyyy-mm-dd');
+  shifts.getRange('D2:D').setNumberFormat('yyyy-mm-dd hh:mm');
+  shifts.setColumnWidth(5, 420);
+
   const first = ss.getSheets()[0];
-  if (first && first.getName() !== TAB.beds && first.getLastRow() === 0 && ss.getSheets().length > 11) {
+  if (first && first.getName() !== TAB.beds && first.getLastRow() === 0 && ss.getSheets().length > 12) {
     ss.deleteSheet(first); // ลบ "Sheet1" ว่าง ๆ ที่ติดมากับไฟล์ใหม่
   }
 }
@@ -764,6 +780,57 @@ function uploadNewsFile_(newsId, field, name, dataUrl) {
   const row = { id: id, updatedAt: nowStr_() };
   row[field] = link;
   upsert_(TAB.news, NEWS_COLS, 'id', row);
+}
+
+/* ------------------------------------------------------------------ */
+/* สถานะเตียงรายชั่วโมง → รายงานประจำเวรย้อนหลัง                            */
+/* ------------------------------------------------------------------ */
+
+/** เมนูในชีต: ตั้งให้บันทึกทุกชั่วโมง (เรียกครั้งเดียว) */
+function enableShiftSnapshots() {
+  ScriptApp.getProjectTriggers().forEach(function (t) {
+    if (t.getHandlerFunction() === 'saveShiftSnapshot') ScriptApp.deleteTrigger(t);
+  });
+  ScriptApp.newTrigger('saveShiftSnapshot').timeBased().everyHours(1).create();
+  saveShiftSnapshot();
+  SpreadsheetApp.getUi().alert('เปิดแล้ว ✓ ระบบจะบันทึกสถานะเตียงทุกชั่วโมงในแท็บ ShiftReports\nรายงานเวรย้อนหลังบนเว็บจะใช้ข้อมูลนี้');
+}
+
+/** บันทึกสถานะเตียงตอนนี้ลงแถวของเวรปัจจุบัน (เรียกจากตัวตั้งเวลา) */
+function saveShiftSnapshot() {
+  ensureSetup_();
+  const ss = SpreadsheetApp.getActive();
+  const tz = ss.getSpreadsheetTimeZone();
+  const now = new Date();
+  const hour = Number(Utilities.formatDate(now, tz, 'H'));
+  const shift = hour < 8 ? 'N' : hour < 16 ? 'M' : 'A';
+  const date = Utilities.formatDate(now, tz, 'yyyy-MM-dd');
+  const beds = readRows_(ss.getSheetByName(TAB.beds), BED_COLS, tz).map(function (r) {
+    delete r.row;
+    return r;
+  });
+  const lock = LockService.getScriptLock();
+  lock.waitLock(15000);
+  try {
+    upsert_(TAB.shifts, SHIFT_COLS, 'key', {
+      key: date + '-' + shift,
+      date: date,
+      shift: SHIFT_TH[shift],
+      savedAt: nowStr_(),
+      beds: JSON.stringify(beds),
+    });
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function readShift_(key) {
+  const ss = SpreadsheetApp.getActive();
+  const rows = readRows_(ss.getSheetByName(TAB.shifts), SHIFT_COLS, ss.getSpreadsheetTimeZone());
+  for (let i = 0; i < rows.length; i++) {
+    if (String(rows[i].key).trim() === key) return rows[i];
+  }
+  return null;
 }
 
 function folderByName_(name) {

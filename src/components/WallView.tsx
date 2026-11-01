@@ -8,7 +8,7 @@ import { countsFromBeds, emptyDaily, findDaily, occupied } from '../lib/logic';
 import { fmtStat, STAT_DEFS, statsFor } from '../lib/stats';
 import { useStore } from '../lib/store';
 import { DutyCard } from './DutyCard';
-import { reportFilename, ShiftReportDialog, ShiftReportExporter, useAutoShiftReport } from './ShiftReport';
+import { liveSource, reportFilename, ShiftReportDialog, ShiftReportExporter, useAutoShiftReport } from './ShiftReport';
 import { FlowTiles } from './Flow';
 import { SyncBadge } from './TopBar';
 import { hasRoster } from '../lib/roster';
@@ -294,10 +294,10 @@ export function WallView({ onExit }: { onExit: () => void }) {
       {autoJob && (
         <ShiftReportExporter
           format={autoJob.format}
-          at={autoJob.at}
+          src={liveSource(data, autoJob.at)}
           onDone={(ok, err) => {
             clearAutoJob();
-            if (ok) toast('บันทึกรายงานเวรอัตโนมัติแล้ว', 'default', reportFilename(autoJob.at, autoJob.format));
+            if (ok) toast('บันทึกรายงานเวรอัตโนมัติแล้ว', 'default', reportFilename(liveSource(data, autoJob.at), autoJob.format));
             else toast('บันทึกรายงานเวรอัตโนมัติไม่สำเร็จ', 'error', err);
           }}
         />
