@@ -257,10 +257,14 @@ export function Modal({
   width?: string;
 }) {
   const ref = useRef<HTMLDivElement>(null);
+  // เก็บ onClose ล่าสุดไว้ใน ref: หน้าแม่สร้างฟังก์ชันใหม่ทุกครั้งที่ render (เช่น ทุกรอบดึงข้อมูลจากชีต)
+  // ถ้าใส่ไว้ใน deps ของ effect ด้านล่าง หน้าต่างจะดึงโฟกัสกลับไปที่ตัวเอง → ช่องที่กำลังพิมพ์หลุดโฟกัส
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
   useEffect(() => {
     if (!open) return;
     const prev = document.activeElement as HTMLElement | null;
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && closeRef.current();
     const root = document.getElementById('root');
     document.addEventListener('keydown', onKey);
     document.body.style.overflow = 'hidden';
@@ -272,7 +276,7 @@ export function Modal({
       if (root) root.inert = false;
       prev?.focus?.();
     };
-  }, [open, onClose]);
+  }, [open]);
 
   if (!open) return null;
   return createPortal(
