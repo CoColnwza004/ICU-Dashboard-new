@@ -257,7 +257,9 @@ export function Monthly({
                       <td className="px-3 py-3">{l.caseCode || '—'}</td>
                       <td className="px-3 py-3 text-ink-2">{l.acuity || '—'}</td>
                       <td className="num px-3 py-3 text-right">{los === null ? '—' : los.toFixed(1)}</td>
-                      <td className="max-w-[260px] truncate py-3 pr-6 pl-3 text-ink-2 sm:pr-8">{l.note || '—'}</td>
+                      <td className="max-w-[340px] min-w-[200px] py-3 pr-6 pl-3 text-[13px] leading-snug text-ink-2 sm:pr-8" title={l.note}>
+                        <span className="line-clamp-3">{l.note || '—'}</span>
+                      </td>
                     </tr>
                   );
                 })}

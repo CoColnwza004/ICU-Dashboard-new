@@ -349,11 +349,56 @@ export const updateBed = (data: IcuData, bedNumber: string, patch: Partial<Bed>)
   return { next: { ...data, beds, daily: today.daily }, ops: [bedOp(bed), today.op] };
 };
 
+/** รายละเอียดการจำหน่าย: ปลายทาง (Refer / ย้ายวอร์ด) + หมายเหตุ — รวมเป็นข้อความเดียวในช่อง note ของทะเบียน */
+export interface OutDetail {
+  hospital?: string;
+  unit?: string;
+  info?: string;
+  note?: string;
+}
+const OUT_LABELS: [keyof OutDetail, string][] = [
+  ['hospital', 'รพ.ปลายทาง'],
+  ['unit', 'ตึก/หอผู้ป่วย'],
+  ['info', 'ข้อมูลเพิ่มเติม'],
+  ['note', 'หมายเหตุ'],
+];
+export const composeOutNote = (d: OutDetail) => {
+  const parts = OUT_LABELS.map(([k, label]) => [label, (d[k] ?? '').trim().replace(/\s*·\s*/g, ', ')] as const).filter(([, v]) => v);
+  // มีแค่หมายเหตุ → เก็บเป็นข้อความธรรมดาเหมือนเดิม
+  if (parts.length === 1 && parts[0][0] === 'หมายเหตุ') return parts[0][1];
+  return parts.map(([label, v]) => `${label}: ${v}`).join(' · ');
+};
+/** อ่านกลับจากช่อง note (ใช้แนะนำชื่อโรงพยาบาล/ตึกที่เคยกรอก) */
+export const parseOutNote = (note: string): OutDetail => {
+  const out: OutDetail = {};
+  note.split(' · ').forEach((part) => {
+    const hit = OUT_LABELS.find(([, label]) => part.startsWith(`${label}: `));
+    if (hit) out[hit[0]] = part.slice(hit[1].length + 2).trim();
+  });
+  return out;
+};
+/** ชื่อโรงพยาบาล / ตึกที่เคยกรอก (ล่าสุดก่อน) */
+export const pastDestinations = (logs: LogEntry[], key: 'hospital' | 'unit') => {
+  const seen = new Set<string>();
+  [...logs]
+    .sort((a, b) => b.timestamp.localeCompare(a.timestamp))
+    .forEach((l) => {
+      const v = parseOutNote(l.note)[key];
+      if (v) seen.add(v);
+    });
+  return [...seen].slice(0, 30);
+};
+
+/**
+ * จำหน่ายผู้ป่วย: เตียงเปลี่ยนเป็น "ทำความสะอาด" + บันทึกทะเบียน
+ * `at` = เวลาที่จำหน่ายจริง (ปรับย้อนหลังได้) · ยอด Refer/เสียชีวิตนับเข้าวันของเวลานั้น
+ */
 export const dischargePatient = (
   data: IcuData,
   bedNumber: string,
   event: OutEvent,
   note: string,
+  at: string = toLocalDateTime(),
 ): ActionResult => {
   const prev = data.beds.find((b) => b.bedNumber === bedNumber);
   if (!prev) return { next: data, ops: [] };
@@ -361,9 +406,20 @@ export const dischargePatient = (
   const beds = putBed(data.beds, bed);
   const inc: Partial<Record<DailyKey, number>> =
     event === 'expired' ? { deathCount: 1 } : event === 'refer' || event === 'ward' ? { referCount: 1 } : {};
-  const today = touchToday(data.daily, beds, inc);
+  const day = at.slice(0, 10);
+  const sameDay = day === todayKey();
+  const today = touchToday(data.daily, beds, sameDay ? inc : {});
+  let daily = today.daily;
+  const ops: SheetOp[] = [bedOp(bed), today.op];
+  if (!sameDay && Object.keys(inc).length) {
+    const base = findDaily(daily, day) ?? emptyDaily(day);
+    const patch: Partial<DailyRecord> = {};
+    (Object.keys(inc) as DailyKey[]).forEach((k) => (patch[k] = base[k] + (inc[k] ?? 0)));
+    daily = putDaily(daily, { ...base, ...patch });
+    ops.push({ type: 'upsertDaily', record: { date: day, ...patch } });
+  }
   const entry: LogEntry = {
-    timestamp: toLocalDateTime(),
+    timestamp: at,
     event,
     bedNumber,
     caseCode: prev.caseCode,
@@ -372,8 +428,8 @@ export const dischargePatient = (
     note,
   };
   return {
-    next: { ...data, beds, daily: today.daily, logs: [...data.logs, entry] },
-    ops: [bedOp(bed), today.op, { type: 'appendLog', entry }],
+    next: { ...data, beds, daily, logs: [...data.logs, entry] },
+    ops: [...ops, { type: 'appendLog', entry }],
   };
 };
 

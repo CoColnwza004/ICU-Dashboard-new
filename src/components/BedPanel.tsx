@@ -2,8 +2,18 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { ArrowLeftRight, Check } from 'lucide-react';
 import type { Acuity, Bed, Gender, OutEvent } from '../types';
 import { ACUITIES, ACUITY_META, AGE_GROUPS, DEVICES } from '../lib/constants';
-import { fmtDateTime, toLocalDateTime } from '../lib/date';
-import { admitPatient, dischargePatient, emptyPatient, movePatient, updateBed, type PatientInput } from '../lib/logic';
+import { fmtDateTime, parseLocalDateTime, toLocalDateTime } from '../lib/date';
+import {
+  admitPatient,
+  composeOutNote,
+  dischargePatient,
+  emptyPatient,
+  movePatient,
+  pastDestinations,
+  updateBed,
+  type OutDetail,
+  type PatientInput,
+} from '../lib/logic';
 import { useStore } from '../lib/store';
 import { Button, cx, Dot, Modal, Segmented, Switch } from './ui';
 
@@ -52,7 +62,9 @@ export function BedPanel({ bedNumber, onClose }: { bedNumber: string | null; onC
   const [moveTo, setMoveTo] = useState('');
   const [moveNote, setMoveNote] = useState('');
   const [outEvent, setOutEvent] = useState<OutEvent>('home');
-  const [outNote, setOutNote] = useState('');
+  const [out, setOut] = useState<OutDetail>({});
+  const [outAt, setOutAt] = useState('');
+  const setOutField = (k: keyof OutDetail, v: string) => setOut((o) => ({ ...o, [k]: v }));
 
   // รีเซ็ตฟอร์มเมื่อเปิดเตียงใหม่เท่านั้น (ไม่รีเซ็ตทุกครั้งที่ข้อมูลจากชีตรีเฟรช)
   useEffect(() => {
@@ -63,7 +75,8 @@ export function BedPanel({ bedNumber, onClose }: { bedNumber: string | null; onC
     setMoveTo('');
     setMoveNote('');
     setOutEvent('home');
-    setOutNote('');
+    setOut({});
+    setOutAt('');
     if (b?.status === 'occupied') setForm(toForm(b));
     else setForm({ ...emptyPatient(), acuity: 'Critical', caseCode: nextCaseCode(data.beds, bedNumber) });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -81,9 +94,31 @@ export function BedPanel({ bedNumber, onClose }: { bedNumber: string | null; onC
     onClose();
   };
 
+  // เวลาที่จำหน่าย: ต้องไม่ก่อนเวลารับเข้า และไม่เกินเวลาปัจจุบัน
+  const admittedAt = (bed?.admittedAt ?? '').replace(' ', 'T').slice(0, 16);
+  const outAtError = !outAt
+    ? 'กรุณาระบุเวลาที่จำหน่าย'
+    : outAt > toLocalDateTime()
+      ? 'เวลาที่จำหน่ายต้องไม่เกินเวลาปัจจุบัน'
+      : admittedAt && outAt < admittedAt
+        ? `ต้องไม่ก่อนเวลารับเข้า (${fmtDateTime(admittedAt)})`
+        : '';
+  const hospitals = useMemo(() => pastDestinations(data.logs, 'hospital'), [data.logs]);
+  const units = useMemo(() => pastDestinations(data.logs, 'unit'), [data.logs]);
+  const openOut = () => {
+    setOutAt(toLocalDateTime());
+    setPane('out');
+  };
+
   const discharge = () => {
+    if (outAtError) return;
     const label = OUT_OPTIONS.find((o) => o.value === outEvent)?.label;
-    void commit((d) => dischargePatient(d, target, outEvent, outNote), `${target} · ${label} แล้ว`);
+    const detail: OutDetail =
+      outEvent === 'refer' ? out : outEvent === 'ward' ? { unit: out.unit, info: out.info, note: out.note } : { note: out.note };
+    const note = composeOutNote(detail);
+    const at = parseLocalDateTime(outAt);
+    const late = at && Date.now() - at.getTime() > 5 * 60_000 ? ` (เวลา ${fmtDateTime(outAt)})` : '';
+    void commit((d) => dischargePatient(d, target, outEvent, note, outAt), `${target} · ${label} แล้ว${late}`);
     onClose();
   };
 
@@ -110,7 +145,7 @@ export function BedPanel({ bedNumber, onClose }: { bedNumber: string | null; onC
           <>
             {mode === 'edit' && (
               <div className="mr-auto flex flex-wrap gap-2">
-                <Button variant="danger" onClick={() => setPane('out')}>
+                <Button variant="danger" onClick={openOut}>
                   จำหน่าย
                 </Button>
                 <Button variant="secondary" onClick={() => setPane('move')} disabled={freeBeds.length === 0}>
@@ -181,18 +216,98 @@ export function BedPanel({ bedNumber, onClose }: { bedNumber: string | null; onC
             </span>
           </p>
           <Segmented options={OUT_OPTIONS} value={outEvent} onChange={setOutEvent} label="ประเภทการจำหน่าย" />
-          <textarea
-            className="field min-h-24"
-            placeholder="หมายเหตุ เช่น ส่งต่อโรงพยาบาลศูนย์ / ย้ายอายุรกรรมชาย"
-            value={outNote}
-            onChange={(e) => setOutNote(e.target.value)}
-          />
+          <Field label="วันเวลาที่จำหน่าย">
+            <div className="flex gap-2">
+              <input
+                type="datetime-local"
+                className="field"
+                value={outAt}
+                min={admittedAt || undefined}
+                max={toLocalDateTime()}
+                onChange={(e) => setOutAt(e.target.value)}
+                aria-invalid={!!outAtError}
+              />
+              <button
+                type="button"
+                onClick={() => setOutAt(toLocalDateTime())}
+                className="btn-glass h-11 shrink-0 rounded-full px-4 text-[13px] font-medium"
+              >
+                ตอนนี้
+              </button>
+            </div>
+            {outAtError ? (
+              <span className="mt-1.5 block text-[12px] text-critical">{outAtError}</span>
+            ) : (
+              <span className="mt-1.5 block text-[12px] text-ink-3">ปรับย้อนหลังได้ ถ้าบันทึกหลังจากผู้ป่วยออกไปแล้ว</span>
+            )}
+          </Field>
+          {outEvent === 'refer' && (
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Field label="โรงพยาบาลปลายทาง">
+                <input
+                  className="field"
+                  list="out-hospitals"
+                  placeholder="เช่น รพ.ศูนย์นนทบุรี"
+                  value={out.hospital ?? ''}
+                  onChange={(e) => setOutField('hospital', e.target.value)}
+                />
+              </Field>
+              <Field label="ตึก / หอผู้ป่วย / แผนก">
+                <input
+                  className="field"
+                  list="out-units"
+                  placeholder="เช่น ตึก A ชั้น 5 · ICU อายุรกรรม"
+                  value={out.unit ?? ''}
+                  onChange={(e) => setOutField('unit', e.target.value)}
+                />
+              </Field>
+            </div>
+          )}
+          {outEvent === 'ward' && (
+            <Field label="ตึก / หอผู้ป่วยปลายทาง">
+              <input
+                className="field"
+                list="out-units"
+                placeholder="เช่น อายุรกรรมชาย ตึก 3 ชั้น 4"
+                value={out.unit ?? ''}
+                onChange={(e) => setOutField('unit', e.target.value)}
+              />
+            </Field>
+          )}
+          {(outEvent === 'refer' || outEvent === 'ward') && (
+            <Field label="ข้อมูลอื่น ๆ">
+              <input
+                className="field"
+                placeholder={outEvent === 'refer' ? 'เช่น เหตุผลการส่งต่อ · ผู้รับประสาน · นำส่งโดยรถพยาบาล' : 'เช่น ผู้รับเวร · เตียงปลายทาง'}
+                value={out.info ?? ''}
+                onChange={(e) => setOutField('info', e.target.value)}
+              />
+            </Field>
+          )}
+          <Field label="โน้ตเพิ่มเติม">
+            <textarea
+              className="field min-h-20"
+              placeholder="บันทึกเพิ่มเติม (ไม่ต้องใส่ชื่อหรือ HN ผู้ป่วย)"
+              value={out.note ?? ''}
+              onChange={(e) => setOutField('note', e.target.value)}
+            />
+          </Field>
+          <datalist id="out-hospitals">
+            {hospitals.map((h) => (
+              <option key={h} value={h} />
+            ))}
+          </datalist>
+          <datalist id="out-units">
+            {units.map((u) => (
+              <option key={u} value={u} />
+            ))}
+          </datalist>
           <div className="flex flex-wrap justify-end gap-2">
             <Button variant="ghost" onClick={() => setPane('form')}>
               ย้อนกลับ
             </Button>
-            <Button variant={outEvent === 'expired' ? 'danger' : 'primary'} onClick={discharge}>
-              ยืนยัน{OUT_OPTIONS.find((o) => o.value === outEvent)?.label}
+            <Button variant={outEvent === 'expired' ? 'danger' : 'primary'} onClick={discharge} disabled={!!outAtError}>
+              ยืนยัน{outEvent === 'refer' ? ' ' : ''}{OUT_OPTIONS.find((o) => o.value === outEvent)?.label}
             </Button>
           </div>
         </div>
