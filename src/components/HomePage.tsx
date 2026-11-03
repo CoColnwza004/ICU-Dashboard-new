@@ -13,6 +13,7 @@ import { useReveal } from '../lib/reveal';
 import { FLOW_ITEMS, useFlow } from './Flow';
 import { Avatar } from './Avatar';
 import { CategoryPill, NewsReader } from './NewsPage';
+import { OrgChart, useActiveStaff, useTodayDuty } from './OrgChart';
 import { cx } from './ui';
 
 /* ------------------------------------------------------------------ */
@@ -24,7 +25,8 @@ export function HomePage({ onGo }: { onGo: (v: View) => void }) {
   const [reading, setReading] = useState<News | null>(null);
   const news = data.news.filter((n) => n.published);
   const urgent = news.find((n) => n.category === 'ด่วน' && isNewNews(n, todayKey())) ?? null;
-  const featured = news.find((n) => n.pinned) ?? news[0] ?? null;
+  // ข่าวเด่น: ปักหมุดก่อน · ไม่มีปักหมุด → ข่าวล่าสุดที่มีรูป · ไม่มีรูปเลย → ข่าวล่าสุด
+  const featured = news.find((n) => n.pinned) ?? news.find((n) => imageUrl(n.image)) ?? news[0] ?? null;
 
   return (
     <div className="bg-black text-[#f5f5f7]">
@@ -42,6 +44,7 @@ export function HomePage({ onGo }: { onGo: (v: View) => void }) {
       <Hero onGo={onGo} ribbon={!!urgent} />
       {featured && <NewsHero n={featured} onRead={() => setReading(featured)} onGo={onGo} />}
       <TileGrid onGo={onGo} />
+      <OrgSection onGo={onGo} />
       <NewsShelf news={news.slice(0, 8)} onRead={setReading} onGo={onGo} />
 
       <NewsReader news={reading} onClose={() => setReading(null)} />
@@ -411,9 +414,6 @@ function TileGrid({ onGo }: { onGo: (v: View) => void }) {
   const pts = kpis.map((k) => kpiPoint(data, k, ym));
   const judged = pts.filter((p) => p.status !== 'none');
   const pass = judged.filter((p) => p.status === 'pass').length;
-  const staff = data.staff.filter((s) => s.active);
-  const ids = new Set(staff.map((s) => s.id));
-  const leader = staff.find((s) => !s.reportsTo || !ids.has(s.reportsTo)) ?? null;
   const docs = data.docs.filter((d) => d.active);
   const count = (n: number, unit: string) => (n ? `${n} ${unit}` : 'พร้อมใช้งาน');
 
@@ -466,24 +466,6 @@ function TileGrid({ onGo }: { onGo: (v: View) => void }) {
         }
       />
       <Tile
-        title="ผังบริหารงาน"
-        sub="โครงสร้างทีมและบุคลากร ICU"
-        glow="#bf5af2"
-        onMore={() => onGo('staff')}
-        visual={
-          leader ? (
-            <div className="text-center">
-              <Avatar staff={leader} size={112} className="mx-auto shadow-[0_0_60px_-10px_#bf5af2]" />
-              <p className="mt-4 text-[19px] font-semibold text-[#f5f5f7]">{leader.name}</p>
-              <p className="text-[14px] text-[#a1a1a6]">{leader.position || leader.group}</p>
-              {staff.length > 1 && <p className="mt-1 text-[13px] text-[#86868b]">และทีมอีก {staff.length - 1} คน</p>}
-            </div>
-          ) : (
-            <p className="text-[17px] text-[#a1a1a6]">ยังไม่มีรายชื่อบุคลากร</p>
-          )
-        }
-      />
-      <Tile
         title="คู่มือ & SOP"
         delay={120}
         sub="ขั้นตอนการทำงาน ระเบียบ ข้อบังคับ"
@@ -520,6 +502,7 @@ function TileGrid({ onGo }: { onGo: (v: View) => void }) {
         glow="#64d2ff"
         onMore={() => onGo('wall')}
         moreLabel="เปิดเลย"
+        wide
         visual={<Big3D name="display" />}
       />
     </section>
@@ -534,6 +517,7 @@ function Tile({
   onMore,
   moreLabel = 'ดูเพิ่มเติม',
   delay = 0,
+  wide,
 }: {
   title: string;
   sub: string;
@@ -542,12 +526,16 @@ function Tile({
   onMore: () => void;
   moreLabel?: string;
   delay?: number;
+  wide?: boolean;
 }) {
   return (
     <Reveal
       as="article"
       delay={delay}
-      className="apple-tile flex min-h-[440px] flex-col items-center px-6 pt-12 pb-12 text-center sm:min-h-[540px] sm:pt-14"
+      className={cx(
+        'apple-tile flex min-h-[440px] flex-col items-center px-6 pt-12 pb-12 text-center sm:min-h-[540px] sm:pt-14',
+        wide && 'sm:col-span-2',
+      )}
     >
       <span aria-hidden className="apple-glow" style={{ '--glow': glow } as CSSProperties} />
       <h3 className="apple-headline text-[32px] sm:text-[40px]">{title}</h3>
@@ -568,6 +556,30 @@ function Big3D({ name, caption }: { name: Img3DName; caption?: string }) {
       <Img3D name={name} size={150} className="pop-3d mx-auto sm:!size-[190px]" />
       {caption && <p className="mt-5 text-[17px] text-[#a1a1a6]">{caption}</p>}
     </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+
+/** ผังบริหารงานแบบลำดับขั้นบนหน้าแรก (ดูอย่างเดียว) */
+function OrgSection({ onGo }: { onGo: (v: View) => void }) {
+  const staff = useActiveStaff();
+  const duty = useTodayDuty();
+  if (!staff.length) return null;
+  return (
+    <Reveal as="section" className="border-t border-white/5 bg-[#0a0a0a] px-4 py-16 text-center sm:py-24">
+      <p className="text-[17px] font-semibold text-[#bf5af2] sm:text-[19px]">บุคลากร</p>
+      <h2 className="apple-headline mt-1 text-[32px] sm:text-[48px]">ผังบริหารงาน ICU</h2>
+      <p className="mt-2 text-[17px] text-[#a1a1a6] sm:text-[21px]">ทีมทั้งหมด {staff.length} คน</p>
+      <div className="mt-5 flex justify-center">
+        <Cta primary onClick={() => onGo('staff')}>
+          ดูบุคลากรทั้งหมด
+        </Cta>
+      </div>
+      <div className="mx-auto mt-12 max-w-[1100px]">
+        <OrgChart staff={staff} duty={duty} compact />
+      </div>
+    </Reveal>
   );
 }
 
@@ -604,29 +616,44 @@ function ShelfCard({ n, onOpen }: { n: News; onOpen: () => void }) {
   const src = imageUrl(n.image);
   const [failed, setFailed] = useState(false);
   const tone = SHELF_TONE[n.category] ?? '#8e8e93';
+  const photo = !!src && !failed;
   return (
     <button
       type="button"
       onClick={onOpen}
       className="group relative flex h-[380px] w-[280px] shrink-0 snap-start flex-col overflow-hidden rounded-[24px] bg-[#1d1d1f] text-left transition-transform duration-500 ease-[var(--ease-liquid)] hover:scale-[1.015] sm:w-[320px]"
     >
-      <div className="p-6">
-        <p className="text-[12px] font-semibold" style={{ color: tone }}>
-          {n.category}
+      {/* ข่าวที่มีรูป: รูปเต็มการ์ด ข้อความอยู่บนแถบมืดด้านล่าง */}
+      {photo && (
+        <>
+          <img
+            src={src}
+            alt=""
+            loading="lazy"
+            referrerPolicy="no-referrer"
+            onError={() => setFailed(true)}
+            className="absolute inset-0 size-full object-cover transition-transform duration-700 group-hover:scale-105"
+          />
+          <span aria-hidden className="absolute inset-0 bg-[linear-gradient(180deg,rgb(0_0_0/0)_35%,rgb(0_0_0/0.82)_100%)]" />
+        </>
+      )}
+      <div className={cx('relative p-6', photo && 'mt-auto')}>
+        <p className="text-[12px] font-semibold" style={{ color: photo ? '#fff' : tone }}>
+          <span className={cx(photo && 'rounded-full px-2 py-0.5')} style={photo ? { background: tone } : undefined}>
+            {n.category}
+          </span>
           {isNewNews(n) && <span className="ml-2 text-[#2997ff]">ใหม่</span>}
         </p>
         <p className="mt-2 line-clamp-3 text-[21px] leading-snug font-semibold text-[#f5f5f7]">{n.title}</p>
-        {n.date && <p className="mt-2 text-[14px] text-[#86868b]">{fmtDateYear(n.date)}</p>}
+        {n.date && <p className={cx('mt-2 text-[14px]', photo ? 'text-white/75' : 'text-[#86868b]')}>{fmtDateYear(n.date)}</p>}
       </div>
-      <div className="mt-auto h-[160px] w-full overflow-hidden">
-        {src && !failed ? (
-          <img src={src} alt="" loading="lazy" referrerPolicy="no-referrer" onError={() => setFailed(true)} className="size-full object-cover transition-transform duration-700 group-hover:scale-105" />
-        ) : (
+      {!photo && (
+        <div className="mt-auto h-[160px] w-full overflow-hidden">
           <div className="flex size-full items-end justify-center" style={{ background: `radial-gradient(80% 100% at 50% 100%, ${tone}55, transparent 75%)` }}>
             <Img3D name={n.category === 'ด่วน' || n.category === 'ประกาศ' ? 'megaphone' : 'news'} size={104} className="mb-4 transition-transform duration-700 group-hover:-translate-y-1 group-hover:scale-105" />
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </button>
   );
 }

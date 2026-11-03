@@ -920,3 +920,116 @@ textarea {
     animation: none;
   }
 }
+
+/* ------------------------------------------------------------------ */
+/* ผังบริหารงานแบบลำดับขั้น: เส้นเชื่อมหัวหน้า → ลูกทีม                       */
+/* ------------------------------------------------------------------ */
+.org-tree,
+.org-tree ul {
+  display: flex;
+  justify-content: center;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.org-tree ul {
+  position: relative;
+  padding-top: 26px;
+}
+/* เส้นตั้งลงจากหัวหน้า */
+.org-tree ul::before,
+.org-stack::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 50%;
+  height: 26px;
+  border-left: 1.5px solid var(--color-line-strong);
+}
+.org-tree li {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 26px 8px 0;
+}
+.org-tree > li {
+  padding-top: 0;
+}
+/* เส้นนอนเชื่อมพี่น้อง + เส้นตั้งขึ้นหาแต่ละคน */
+.org-tree ul > li::before,
+.org-tree ul > li::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  width: 50%;
+  height: 26px;
+  border-top: 1.5px solid var(--color-line-strong);
+}
+.org-tree ul > li::before {
+  right: 50%;
+}
+.org-tree ul > li::after {
+  left: 50%;
+  border-left: 1.5px solid var(--color-line-strong);
+}
+.org-tree ul > li:first-child::before,
+.org-tree ul > li:last-child::after {
+  border-top: 0;
+}
+.org-tree ul > li:last-child::before {
+  border-right: 1.5px solid var(--color-line-strong);
+  border-top-right-radius: 10px;
+}
+.org-tree ul > li:first-child::after {
+  border-top-left-radius: 10px;
+}
+.org-tree ul > li:only-child {
+  padding-top: 0;
+}
+.org-tree ul > li:only-child::before,
+.org-tree ul > li:only-child::after {
+  display: none;
+}
+.org-stack {
+  position: relative;
+  padding-top: 26px;
+}
+.org-node {
+  display: flex;
+  width: 148px;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+.org-hit {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  align-items: center;
+  border-radius: 20px;
+  padding: 6px 4px 8px;
+  transition: background-color 0.2s var(--ease-apple);
+}
+button.org-hit:hover {
+  background: var(--color-fill-soft);
+}
+.org-role {
+  display: block;
+  max-width: 100%;
+  margin-bottom: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--color-ink-2);
+}
+/* วงแหวนสีตามชั้น แบบผังองค์กร */
+.org-ring {
+  display: inline-flex;
+  border-radius: 9999px;
+  padding: 3px;
+  background: var(--color-surface);
+  box-shadow:
+    0 0 0 var(--ring-w, 3px) var(--ring),
+    0 10px 24px -14px rgb(0 0 0 / 0.45);
+}

@@ -545,6 +545,43 @@ export const saveStaff = (data: IcuData, s: Staff, photoDataUrl?: string): Actio
   return { next: { ...data, staff }, ops };
 };
 
+/**
+ * ลบบุคลากรถาวร: ลบออกจากแท็บ Staff + ตารางเวรตั้งแต่เดือนนี้ (เดือนก่อน ๆ เก็บเป็นประวัติ)
+ * ลูกทีมของคนที่ถูกลบจะย้ายไปขึ้นกับหัวหน้าของคนนั้นแทน
+ */
+export const deleteStaff = (data: IcuData, id: string): ActionResult => {
+  const target = data.staff.find((s) => s.id === id);
+  if (!target) return { next: data, ops: [] };
+  const boss = target.reportsTo === id ? '' : target.reportsTo;
+  const ops: SheetOp[] = [];
+  const staff = data.staff
+    .filter((s) => s.id !== id)
+    .map((s) => {
+      if (s.reportsTo !== id) return s;
+      ops.push({ type: 'upsertStaff', staff: { id: s.id, reportsTo: boss } });
+      return { ...s, reportsTo: boss };
+    });
+  const fromMonth = todayKey().slice(0, 7);
+  ops.push({ type: 'deleteStaff', id, fromMonth });
+  const roster = data.roster.filter((r) => !(r.staffId === id && r.month >= fromMonth));
+  return { next: { ...data, staff, roster }, ops };
+};
+
+/** หัวหน้าที่ใช้ในผัง: ถ้าหัวหน้าที่ระบุไว้ไม่ใช้งานแล้ว ไล่ขึ้นไปหาหัวหน้าคนถัดไปที่ยังปฏิบัติงาน */
+export const activeBoss = (all: Staff[], s: Staff) => {
+  const byId = new Map(all.map((x) => [x.id, x]));
+  const seen = new Set([s.id]);
+  let cur = s.reportsTo;
+  while (cur && !seen.has(cur)) {
+    const b = byId.get(cur);
+    if (!b) return '';
+    if (b.active) return b.id;
+    seen.add(cur);
+    cur = b.reportsTo;
+  }
+  return '';
+};
+
 /** แก้ตารางเวรหลายช่องพร้อมกัน: changes[staffId][day] = รหัสเวร */
 export const saveRoster = (data: IcuData, month: string, changes: Record<string, Record<number, string>>): ActionResult => {
   let roster = [...data.roster];

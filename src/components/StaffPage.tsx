@@ -1,43 +1,17 @@
-import { Camera, LayoutList, Network, Search, UserPlus } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { Camera, LayoutList, Network, Search, Trash2, UserPlus } from 'lucide-react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { Staff, StaffGroup } from '../types';
-import { todayKey } from '../lib/date';
-import { nextStaffId, saveStaff } from '../lib/logic';
-import { joinName, NAME_PREFIXES, parseCode, realName, rosterFor, SHIFT_BY_KEY, splitName, type NameParts } from '../lib/roster';
+import { deleteStaff, nextStaffId, saveStaff } from '../lib/logic';
+import { joinName, NAME_PREFIXES, realName, splitName, type NameParts } from '../lib/roster';
 import { sheetLink } from '../lib/sheetApi';
 import { useStore } from '../lib/store';
 import { Avatar } from './Avatar';
-import { OrgChart } from './OrgChart';
+import { OrgChart, useActiveStaff, useTodayDuty } from './OrgChart';
 import { Button, cx, Empty, Modal, PageHero, Segmented, Switch } from './ui';
 
 export const STAFF_GROUPS: StaffGroup[] = ['แพทย์', 'พยาบาล', 'ผู้ช่วยพยาบาล', 'พนักงานช่วยเหลือคนไข้', 'อื่นๆ'];
 
 type Mode = 'org' | 'list';
-
-/** เวรวันนี้ของแต่ละคน เช่น "เวรเช้า", "หยุด" */
-const useTodayDuty = () => {
-  const { data } = useStore();
-  return useMemo(() => {
-    const today = todayKey();
-    const day = Number(today.slice(8, 10));
-    const map = new Map<string, string>();
-    rosterFor(data, today.slice(0, 7)).forEach((l) => {
-      if (!l.staff) return;
-      const c = parseCode(l.days[day - 1]);
-      const text = c.shifts.length
-        ? c.shifts.map((k) => SHIFT_BY_KEY[k].label.replace('เวร', '')).join(' + ') + (c.lead ? ' ★' : '')
-        : c.off
-          ? 'หยุด'
-          : c.leave
-            ? 'ลา'
-            : c.training
-              ? 'อบรม'
-              : c.other;
-      if (text) map.set(l.staff.id, text);
-    });
-    return map;
-  }, [data]);
-};
 
 export function StaffPage({ startNew, onStarted }: { startNew?: boolean; onStarted?: () => void }) {
   const { data, meta, isStaff } = useStore();
@@ -45,16 +19,28 @@ export function StaffPage({ startNew, onStarted }: { startNew?: boolean; onStart
   const [q, setQ] = useState('');
   const [group, setGroup] = useState<'all' | StaffGroup>('all');
   const [editing, setEditing] = useState<Staff | 'new' | null>(null);
+  const [bossFor, setBossFor] = useState('');
+  const [removing, setRemoving] = useState<Staff | null>(null);
   const duty = useTodayDuty();
   const open = isStaff ? setEditing : undefined;
+  const addUnder = isStaff
+    ? (b: Staff) => {
+        setBossFor(b.id);
+        setEditing('new');
+      }
+    : undefined;
+  const addNew = () => {
+    setBossFor('');
+    setEditing('new');
+  };
 
   useEffect(() => {
     if (!startNew) return;
-    if (isStaff) setEditing('new');
+    if (isStaff) addNew();
     onStarted?.();
   }, [startNew, isStaff, onStarted]);
 
-  const active = data.staff.filter((s) => s.active);
+  const active = useActiveStaff();
   const counts = STAFF_GROUPS.map((g) => ({ g, n: active.filter((s) => s.group === g).length })).filter((x) => x.n > 0);
   const list = active.filter(
     (s) =>
@@ -96,7 +82,7 @@ export function StaffPage({ startNew, onStarted }: { startNew?: boolean; onStart
               ]}
             />
             {isStaff && (
-              <Button variant="primary" onClick={() => setEditing('new')}>
+              <Button variant="primary" onClick={addNew}>
                 <UserPlus className="size-4" strokeWidth={1.8} />
                 เพิ่มบุคลากร
               </Button>
@@ -121,7 +107,7 @@ export function StaffPage({ startNew, onStarted }: { startNew?: boolean; onStart
         </div>
       ) : mode === 'org' ? (
         <section>
-          <OrgChart staff={active} duty={duty} onOpen={open} />
+          <OrgChart staff={active} duty={duty} onOpen={open} onAdd={addUnder} onDelete={isStaff ? setRemoving : undefined} />
         </section>
       ) : (
         <section className="space-y-5">
@@ -171,7 +157,8 @@ export function StaffPage({ startNew, onStarted }: { startNew?: boolean; onStart
         </section>
       )}
 
-      <StaffPanel value={editing} onClose={() => setEditing(null)} />
+      <StaffPanel value={editing} bossFor={bossFor} onClose={() => setEditing(null)} onDelete={(x) => setRemoving(x)} />
+      <DeleteStaff person={removing} onClose={() => setRemoving(null)} onDone={() => setEditing(null)} />
     </div>
   );
 }
@@ -248,7 +235,31 @@ const blankStaff = (id: string, order: number): Staff => ({
   active: true,
 });
 
-function StaffPanel({ value, onClose }: { value: Staff | 'new' | null; onClose: () => void }) {
+/** ตำแหน่งที่ใช้บ่อย — พิมพ์ตำแหน่งใหม่เองได้ */
+const COMMON_POSITIONS = [
+  'หัวหน้าหอผู้ป่วย',
+  'รองหัวหน้าหอผู้ป่วย',
+  'หัวหน้าทีม',
+  'พยาบาลวิชาชีพชำนาญการพิเศษ',
+  'พยาบาลวิชาชีพชำนาญการ',
+  'พยาบาลวิชาชีพปฏิบัติการ',
+  'พยาบาลวิชาชีพ',
+  'ผู้ช่วยพยาบาล',
+  'พนักงานช่วยเหลือคนไข้',
+  'แพทย์',
+];
+
+function StaffPanel({
+  value,
+  bossFor,
+  onClose,
+  onDelete,
+}: {
+  value: Staff | 'new' | null;
+  bossFor: string;
+  onClose: () => void;
+  onDelete: (s: Staff) => void;
+}) {
   const { data, commit, toast } = useStore();
   const [form, setForm] = useState<Staff>(blankStaff('S01', 1));
   const [skills, setSkills] = useState('');
@@ -261,7 +272,7 @@ function StaffPanel({ value, onClose }: { value: Staff | 'new' | null; onClose: 
     if (!value) return;
     const s =
       value === 'new'
-        ? blankStaff(nextStaffId(data.staff), Math.max(0, ...data.staff.map((x) => x.order)) + 1)
+        ? { ...blankStaff(nextStaffId(data.staff), Math.max(0, ...data.staff.map((x) => x.order)) + 1), reportsTo: bossFor }
         : value;
     setForm(s);
     setParts(splitName(s.name));
@@ -302,6 +313,8 @@ function StaffPanel({ value, onClose }: { value: Staff | 'new' | null; onClose: 
   };
 
   const bosses = data.staff.filter((s) => s.active && s.id !== form.id);
+  const positions = [...new Set([...data.staff.map((x) => x.position.trim()).filter(Boolean), ...COMMON_POSITIONS])];
+  const boss = data.staff.find((b) => b.id === form.reportsTo);
   const preview: Staff = { ...form, photo: photo ?? form.photo };
 
   return (
@@ -309,9 +322,21 @@ function StaffPanel({ value, onClose }: { value: Staff | 'new' | null; onClose: 
       open={!!value}
       onClose={onClose}
       title={isNew ? 'เพิ่มบุคลากร' : realName(form.name) || 'บุคลากร'}
-      subtitle={isNew ? 'ชื่อและรูปจะแสดงในผังองค์กรและตารางเวร' : `รหัส ${form.id}`}
+      subtitle={
+        isNew
+          ? boss
+            ? `ลูกทีมของ ${boss.nickname || realName(boss.name)} · ชื่อและรูปจะแสดงในผังองค์กรและตารางเวร`
+            : 'ชื่อและรูปจะแสดงในผังองค์กรและตารางเวร'
+          : `รหัส ${form.id}`
+      }
       footer={
         <>
+          {value && value !== 'new' && (
+            <Button variant="danger" className="mr-auto" onClick={() => onDelete(value)}>
+              <Trash2 className="size-4" strokeWidth={1.8} />
+              ลบ
+            </Button>
+          )}
           <Button variant="ghost" onClick={onClose}>
             ยกเลิก
           </Button>
@@ -369,7 +394,18 @@ function StaffPanel({ value, onClose }: { value: Staff | 'new' | null; onClose: 
             <input className="field" value={form.nickname} onChange={(e) => set('nickname', e.target.value)} />
           </Field>
           <Field label="ตำแหน่ง">
-            <input className="field" value={form.position} onChange={(e) => set('position', e.target.value)} placeholder="เช่น พยาบาลวิชาชีพชำนาญการ" />
+            <input
+              className="field"
+              list="staff-positions"
+              value={form.position}
+              onChange={(e) => set('position', e.target.value)}
+              placeholder="เลือก หรือพิมพ์ตำแหน่งใหม่"
+            />
+            <datalist id="staff-positions">
+              {positions.map((x) => (
+                <option key={x} value={x} />
+              ))}
+            </datalist>
           </Field>
           <Field label="กลุ่มงาน">
             <select className="field" value={form.group} onChange={(e) => set('group', e.target.value as StaffGroup)}>
@@ -410,6 +446,61 @@ function StaffPanel({ value, onClose }: { value: Staff | 'new' | null; onClose: 
           />
         </div>
       </div>
+    </Modal>
+  );
+}
+
+/** ยืนยันลบบุคลากรถาวร */
+function DeleteStaff({ person, onClose, onDone }: { person: Staff | null; onClose: () => void; onDone: () => void }) {
+  const { data, commit } = useStore();
+  const p = person;
+  const team = p ? data.staff.filter((s) => s.reportsTo === p.id) : [];
+  const boss = p ? data.staff.find((s) => s.id === p.reportsTo) : undefined;
+  const remove = () => {
+    if (!p) return;
+    void commit((d) => deleteStaff(d, p.id), `ลบ ${p.nickname || realName(p.name)} ออกแล้ว`);
+    onClose();
+    onDone();
+  };
+  return (
+    <Modal
+      open={!!p}
+      onClose={onClose}
+      title="ลบบุคลากร"
+      subtitle="ลบออกจากผังบริหาร รายชื่อ และตารางเวรตั้งแต่เดือนนี้ · ย้อนกลับไม่ได้"
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose}>
+            ยกเลิก
+          </Button>
+          <Button variant="danger" onClick={remove}>
+            <Trash2 className="size-4" strokeWidth={1.8} />
+            ยืนยันลบ
+          </Button>
+        </>
+      }
+    >
+      {p && (
+        <div className="space-y-4">
+          <div className="flex items-center gap-4">
+            <Avatar staff={p} size={64} />
+            <div>
+              <p className="text-[17px] font-semibold">{p.name}</p>
+              <p className="text-[13px] text-ink-3">
+                {p.nickname ? `(${p.nickname}) · ` : ''}
+                {p.position || p.group}
+              </p>
+            </div>
+          </div>
+          {team.length > 0 && (
+            <p className="well px-4 py-3 text-[14px] text-ink-2">
+              ลูกทีม {team.length} คน ({team.map((t) => t.nickname || realName(t.name)).join(', ')}) จะย้ายไปขึ้นกับ{' '}
+              <span className="font-medium text-ink">{boss ? boss.nickname || realName(boss.name) : 'บนสุดของผัง'}</span>
+            </p>
+          )}
+          <p className="text-[13px] text-ink-3">ตารางเวรของเดือนก่อน ๆ ยังเก็บไว้เป็นประวัติ · ถ้าแค่ย้าย/ลาออกชั่วคราว ใช้สวิตช์ “ปฏิบัติงานอยู่” แทน</p>
+        </div>
+      )}
     </Modal>
   );
 }

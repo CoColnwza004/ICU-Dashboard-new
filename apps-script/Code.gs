@@ -589,6 +589,7 @@ function applyOp_(op) {
   if (op.type === 'upsertStats') return upsertStats_(op.record);
   if (op.type === 'upsertStaff') return upsert_(TAB.staff, STAFF_COLS, 'id', toStaffRow_(op.staff));
   if (op.type === 'upsertRoster') return upsertRoster_(op.record);
+  if (op.type === 'deleteStaff') return deleteStaff_(op.id, op.fromMonth);
   if (op.type === 'uploadPhoto') return uploadPhoto_(op.staffId, op.dataUrl);
   if (op.type === 'upsertDoc') return upsert_(TAB.docs, DOC_COLS, 'id', toDocRow_(op.doc));
   if (op.type === 'uploadDoc') return uploadDoc_(op.docId, op.name, op.dataUrl);
@@ -639,6 +640,31 @@ function toStaffRow_(st) {
 }
 
 /** ตารางเวร: เขียนเฉพาะวันที่ส่งมา (คนอื่นแก้วันอื่นพร้อมกันได้ไม่ทับกัน) */
+/** ลบบุคลากรออกจากแท็บ Staff ถาวร + ลบแถวตารางเวรตั้งแต่เดือน fromMonth (เดือนก่อนหน้าเก็บไว้เป็นประวัติ) */
+function deleteStaff_(staffId, fromMonth) {
+  const id = String(staffId || '').trim();
+  if (!id) throw new Error('missing id');
+  const ss = SpreadsheetApp.getActive();
+  const tz = ss.getSpreadsheetTimeZone();
+  const st = ss.getSheetByName(TAB.staff);
+  const last = st.getLastRow();
+  if (last >= 2) {
+    const ids = st.getRange(2, 1, last - 1, 1).getDisplayValues();
+    for (let i = ids.length - 1; i >= 0; i--) {
+      if (String(ids[i][0]).trim() === id) st.deleteRow(i + 2);
+    }
+  }
+  const from = /^\d{4}-\d{2}$/.test(String(fromMonth || '')) ? String(fromMonth) : '';
+  if (!from) return;
+  const ro = ss.getSheetByName(TAB.roster);
+  const rl = ro.getLastRow();
+  if (rl < 2) return;
+  const keys = ro.getRange(2, 1, rl - 1, 2).getDisplayValues();
+  for (let i = keys.length - 1; i >= 0; i--) {
+    if (String(keys[i][1]).trim() === id && monthKey_(keys[i][0], tz) >= from) ro.deleteRow(i + 2);
+  }
+}
+
 function upsertRoster_(rec) {
   const ss = SpreadsheetApp.getActive();
   const tz = ss.getSpreadsheetTimeZone();

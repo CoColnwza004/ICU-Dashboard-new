@@ -246,6 +246,7 @@ export type SheetOp =
   | { type: 'upsertStaff'; staff: Partial<Omit<Staff, 'row'>> & { id: string } }
   | { type: 'upsertRoster'; record: { month: string; staffId: string; name: string; days: Record<string, string> } }
   | { type: 'uploadPhoto'; staffId: string; dataUrl: string }
+  | { type: 'deleteStaff'; id: string; fromMonth: string }
   | { type: 'upsertDoc'; doc: Partial<Omit<Doc, 'row' | 'active' | 'updatedAt'>> & { id: string; status?: 'ใช้งาน' | 'ยกเลิก' } }
   | { type: 'uploadDoc'; docId: string; name: string; dataUrl: string }
   | { type: 'upsertNews'; news: Partial<Omit<News, 'row' | 'published' | 'updatedAt'>> & { id: string; status?: 'เผยแพร่' | 'ซ่อน' } }
