@@ -433,6 +433,72 @@ export const dischargePatient = (
   };
 };
 
+/** เวลาในทะเบียนแบบ yyyy-MM-ddTHH:mm */
+export const logTime = (t: string) => t.replace(' ', 'T').slice(0, 16);
+
+/** รายการทั้งหมดของเคสเดียวกัน (รหัสเคส + เวลารับเข้าเดียวกัน = การนอนครั้งเดียวกัน) */
+export const caseLogs = (logs: LogEntry[], out: LogEntry) =>
+  logs.filter(
+    (l) =>
+      l.caseCode === out.caseCode &&
+      (logTime(l.admittedAt) === logTime(out.admittedAt) || (l.event === 'admit' && logTime(l.timestamp) === logTime(out.admittedAt))),
+  );
+
+const OUT_COUNT: Partial<Record<LogEvent, DailyKey>> = { refer: 'referCount', ward: 'referCount', expired: 'deathCount' };
+
+/**
+ * แก้เคสที่จำหน่ายแล้วย้อนหลัง: เวลารับเข้า / เวลาจำหน่าย / หมายเหตุ
+ * อัปเดตทุกแถวของเคสในทะเบียน และย้ายยอดรายวัน (รับใหม่ / Refer / เสียชีวิต) ไปวันที่ถูกต้อง
+ */
+export const editCase = (data: IcuData, out: LogEntry, next: { admittedAt: string; outAt: string; note: string }): ActionResult => {
+  const oldIn = logTime(out.admittedAt);
+  const oldOut = logTime(out.timestamp);
+  const related = caseLogs(data.logs, out);
+  const ops: SheetOp[] = [];
+  const logs = data.logs.map((l) => {
+    if (!related.includes(l)) return l;
+    const isOut = l === out;
+    const isAdmit = l.event === 'admit';
+    const upd: LogEntry = {
+      ...l,
+      admittedAt: next.admittedAt,
+      timestamp: isOut ? next.outAt : isAdmit ? next.admittedAt : l.timestamp,
+      note: isOut ? next.note : l.note,
+    };
+    const patch: { timestamp?: string; admittedAt?: string; note?: string } = {};
+    if (logTime(l.admittedAt) !== next.admittedAt) patch.admittedAt = next.admittedAt;
+    if (logTime(l.timestamp) !== logTime(upd.timestamp)) patch.timestamp = upd.timestamp;
+    if (isOut && l.note !== next.note) patch.note = next.note;
+    if (Object.keys(patch).length && l.row) ops.push({ type: 'updateLog', row: l.row, caseCode: l.caseCode, bedNumber: l.bedNumber, patch });
+    return Object.keys(patch).length ? upd : l;
+  });
+  // ยอดรายวันที่ต้องย้ายวัน
+  const delta = new Map<string, Partial<Record<DailyKey, number>>>();
+  const move = (key: DailyKey, from: string, to: string) => {
+    if (from === to) return;
+    const a = delta.get(from) ?? {};
+    a[key] = (a[key] ?? 0) - 1;
+    delta.set(from, a);
+    const b = delta.get(to) ?? {};
+    b[key] = (b[key] ?? 0) + 1;
+    delta.set(to, b);
+  };
+  if (related.some((l) => l.event === 'admit')) move('admittedNew', oldIn.slice(0, 10), next.admittedAt.slice(0, 10));
+  const outKey = OUT_COUNT[out.event];
+  if (outKey) move(outKey, oldOut.slice(0, 10), next.outAt.slice(0, 10));
+  let daily = data.daily;
+  delta.forEach((inc, day) => {
+    const base = findDaily(daily, day);
+    if (!base && Object.values(inc).every((v) => (v ?? 0) <= 0)) return;
+    const rec = base ?? emptyDaily(day);
+    const patch: Partial<DailyRecord> = {};
+    (Object.keys(inc) as DailyKey[]).forEach((k) => (patch[k] = Math.max(0, rec[k] + (inc[k] ?? 0))));
+    daily = putDaily(daily, { ...rec, ...patch });
+    ops.push({ type: 'upsertDaily', record: { date: day, ...patch } });
+  });
+  return { next: { ...data, logs, daily }, ops };
+};
+
 /** ย้ายผู้ป่วยไปเตียงอื่น: ข้อมูลผู้ป่วยตามไปทั้งหมด (วันที่รับเข้าเดิม) เตียงเดิมเปลี่ยนเป็น "ทำความสะอาด" */
 export const movePatient = (data: IcuData, from: string, to: string, note: string): ActionResult => {
   const src = data.beds.find((b) => b.bedNumber === from);

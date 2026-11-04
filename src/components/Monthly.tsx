@@ -1,15 +1,15 @@
-import { Activity, Download, Printer, Ambulance, ArrowUpRight, BedDouble, ChevronRight, Clock, HeartCrack, Repeat, Timer, UserPlus, Wind } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { Activity, Download, Printer, Ambulance, ArrowUpRight, BedDouble, ChevronRight, Clock, HeartCrack, Pencil, Repeat, Timer, UserPlus, Wind } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
 import { EVENT_META, INDICATORS } from '../lib/constants';
-import { fmtDateLong, fmtDateShort, fmtDateTime, fmtDayMonth, fmtMonth, parseLocalDateTime } from '../lib/date';
-import { availableMonths, monthlySummary } from '../lib/logic';
+import { fmtDateLong, fmtDateShort, fmtDateTime, fmtDayMonth, fmtMonth, parseLocalDateTime, toLocalDateTime } from '../lib/date';
+import { availableMonths, editCase, logTime, monthlySummary } from '../lib/logic';
 import { sheetLink } from '../lib/sheetApi';
 import { fmtStat, STAT_DEFS, statsFor } from '../lib/stats';
 import { useStore } from '../lib/store';
-import type { IcuData } from '../types';
+import type { IcuData, LogEntry } from '../types';
 import { admitAcuitySlices, dischargeSlices, sumSlices } from '../lib/breakdowns';
 import { CHART_TYPES, DonutChart, SeriesChart, type ChartType } from './charts';
-import { Button, Dot, Empty, PageHero, Segmented } from './ui';
+import { Button, Dot, Empty, Modal, PageHero, Segmented } from './ui';
 
 type Filter = 'all' | 'in' | 'out';
 
@@ -52,7 +52,8 @@ export function Monthly({
   onPdf: (ym: string) => void;
   pdfBusy: boolean;
 }) {
-  const { data, meta } = useStore();
+  const { data, meta, isStaff } = useStore();
+  const [editing, setEditing] = useState<LogEntry | null>(null);
   const months = useMemo(() => availableMonths(data), [data]);
   const [ym, setYm] = useState(months[0]);
   const [filter, setFilter] = useState<Filter>('all');
@@ -237,6 +238,7 @@ export function Monthly({
                   <th className="px-3 py-2.5 font-medium">ระดับ</th>
                   <th className="px-3 py-2.5 text-right font-medium">นอน (วัน)</th>
                   <th className="py-2.5 pr-6 pl-3 font-medium sm:pr-8">หมายเหตุ</th>
+                  {isStaff && <th className="py-2.5 pr-6 font-medium sm:pr-8"><span className="sr-only">แก้ไข</span></th>}
                 </tr>
               </thead>
               <tbody>
@@ -260,6 +262,21 @@ export function Monthly({
                       <td className="max-w-[340px] min-w-[200px] py-3 pr-6 pl-3 text-[13px] leading-snug text-ink-2 sm:pr-8" title={l.note}>
                         <span className="line-clamp-3">{l.note || '—'}</span>
                       </td>
+                      {isStaff && (
+                        <td className="py-3 pr-6 sm:pr-8">
+                          {EVENT_META[l.event].out && (
+                            <button
+                              type="button"
+                              onClick={() => setEditing(l)}
+                              aria-label={`แก้ไขเคส ${l.caseCode || l.bedNumber} ${fmtDateTime(l.timestamp)}`}
+                              title="แก้ไขเวลา / หมายเหตุ"
+                              className="inline-flex size-8 items-center justify-center rounded-full bg-fill-soft text-ink-2 transition-colors hover:bg-accent/15 hover:text-accent"
+                            >
+                              <Pencil className="size-3.5" strokeWidth={1.9} />
+                            </button>
+                          )}
+                        </td>
+                      )}
                     </tr>
                   );
                 })}
@@ -268,6 +285,85 @@ export function Monthly({
           </div>
         )}
       </section>
+      <EditCaseDialog entry={editing} onClose={() => setEditing(null)} />
     </div>
+  );
+}
+
+/** แก้เคสที่จำหน่ายแล้วย้อนหลัง: เวลารับเข้า · เวลาจำหน่าย · หมายเหตุ */
+function EditCaseDialog({ entry, onClose }: { entry: LogEntry | null; onClose: () => void }) {
+  const { commit } = useStore();
+  const [inAt, setInAt] = useState('');
+  const [outAt, setOutAt] = useState('');
+  const [note, setNote] = useState('');
+  useEffect(() => {
+    if (!entry) return;
+    setInAt(logTime(entry.admittedAt));
+    setOutAt(logTime(entry.timestamp));
+    setNote(entry.note);
+  }, [entry]);
+
+  const now = toLocalDateTime();
+  const error = !inAt || !outAt
+    ? 'กรุณาระบุวันเวลาให้ครบ'
+    : outAt > now
+      ? 'เวลาจำหน่ายต้องไม่เกินเวลาปัจจุบัน'
+      : outAt < inAt
+        ? 'เวลาจำหน่ายต้องหลังเวลารับเข้า'
+        : '';
+  const a = parseLocalDateTime(inAt);
+  const b = parseLocalDateTime(outAt);
+  const los = a && b && b >= a ? (b.getTime() - a.getTime()) / 86_400_000 : null;
+  const changed = !!entry && (inAt !== logTime(entry.admittedAt) || outAt !== logTime(entry.timestamp) || note !== entry.note);
+  const unsynced = !!entry && entry.row === undefined;
+
+  const save = () => {
+    if (!entry || error || !changed) return;
+    void commit((d) => editCase(d, entry, { admittedAt: inAt, outAt, note }), `แก้ไขเคส ${entry.caseCode || entry.bedNumber} แล้ว`);
+    onClose();
+  };
+
+  return (
+    <Modal
+      open={!!entry}
+      onClose={onClose}
+      title="แก้ไขเคสย้อนหลัง"
+      subtitle={entry ? `${entry.caseCode || 'ไม่ระบุรหัสเคส'} · เตียง ${entry.bedNumber} · ${EVENT_META[entry.event].label}` : undefined}
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose}>
+            ยกเลิก
+          </Button>
+          <Button variant="primary" onClick={save} disabled={!!error || !changed || unsynced}>
+            บันทึก
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className="block">
+            <span className="mb-1.5 block text-[12px] text-ink-2">วันเวลาที่รับเข้า</span>
+            <input type="datetime-local" className="field" value={inAt} max={outAt || now} onChange={(e) => setInAt(e.target.value)} />
+          </label>
+          <label className="block">
+            <span className="mb-1.5 block text-[12px] text-ink-2">วันเวลาที่จำหน่าย</span>
+            <input type="datetime-local" className="field" value={outAt} min={inAt || undefined} max={now} onChange={(e) => setOutAt(e.target.value)} />
+          </label>
+        </div>
+        <p className={error ? 'text-[13px] text-critical' : 'text-[13px] text-ink-3'}>
+          {error || (los !== null ? `นอน ICU ${los.toFixed(1)} วัน` : '')}
+        </p>
+        <label className="block">
+          <span className="mb-1.5 block text-[12px] text-ink-2">หมายเหตุ / ปลายทาง</span>
+          <textarea className="field min-h-24" value={note} onChange={(e) => setNote(e.target.value)} placeholder="ไม่ต้องใส่ชื่อหรือ HN ผู้ป่วย" />
+        </label>
+        <p className="text-[12px] text-ink-3">
+          {unsynced
+            ? 'รายการนี้ยังไม่ได้บันทึกลงชีต รอสักครู่แล้วลองใหม่'
+            : 'แก้ทุกแถวของเคสนี้ในแท็บ Log และย้ายยอดรับใหม่ / Refer / เสียชีวิตในบันทึกรายวันไปวันที่ถูกต้องให้อัตโนมัติ'}
+        </p>
+      </div>
+    </Modal>
   );
 }

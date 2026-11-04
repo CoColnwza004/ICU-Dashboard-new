@@ -590,6 +590,7 @@ function applyOp_(op) {
   if (op.type === 'upsertStaff') return upsert_(TAB.staff, STAFF_COLS, 'id', toStaffRow_(op.staff));
   if (op.type === 'upsertRoster') return upsertRoster_(op.record);
   if (op.type === 'deleteStaff') return deleteStaff_(op.id, op.fromMonth);
+  if (op.type === 'updateLog') return updateLog_(op.row, op.caseCode, op.bedNumber, op.patch);
   if (op.type === 'uploadPhoto') return uploadPhoto_(op.staffId, op.dataUrl);
   if (op.type === 'upsertDoc') return upsert_(TAB.docs, DOC_COLS, 'id', toDocRow_(op.doc));
   if (op.type === 'uploadDoc') return uploadDoc_(op.docId, op.name, op.dataUrl);
@@ -615,6 +616,23 @@ function upsertDaily_(record) {
   const sh = upsert_(TAB.daily, DAILY_COLS, 'date', record);
   const last = sh.getLastRow();
   if (last > 2) sh.getRange(2, 1, last - 1, DAILY_COLS.length).sort({ column: 1, ascending: true });
+}
+
+/** แก้รายการในทะเบียนย้อนหลัง (เวลา / หมายเหตุ) · ตรวจรหัสเคสและเตียงก่อน กันแก้ผิดแถว */
+function updateLog_(row, caseCode, bedNumber, patch) {
+  const sh = SpreadsheetApp.getActive().getSheetByName(TAB.log);
+  const r = Number(row);
+  if (!(r >= 2) || r > sh.getLastRow()) throw new Error('ไม่พบรายการนี้ในทะเบียน กรุณารีเฟรชแล้วลองใหม่');
+  const cur = sh.getRange(r, 1, 1, LOG_COLS.length).getDisplayValues()[0];
+  const same = function (c, v) { return String(cur[LOG_COLS.indexOf(c)]).trim() === String(v || '').trim(); };
+  if (!same('caseCode', caseCode) || !same('bedNumber', bedNumber)) {
+    throw new Error('รายการในทะเบียนถูกแก้ไขในชีต กรุณารีเฟรชแล้วลองใหม่');
+  }
+  ['timestamp', 'admittedAt', 'note'].forEach(function (c) {
+    if (patch && Object.prototype.hasOwnProperty.call(patch, c)) {
+      sh.getRange(r, LOG_COLS.indexOf(c) + 1).setValue(toCell_(c, patch[c]));
+    }
+  });
 }
 
 function appendLog_(entry) {
