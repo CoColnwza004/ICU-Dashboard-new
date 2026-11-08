@@ -461,6 +461,48 @@ export const retimeAdmission = (data: IcuData, bedNumber: string, oldAt: string,
   return { next: { ...data, logs, daily: moved.daily }, ops: [...ops, ...moved.ops] };
 };
 
+/** หมายเหตุในแถวรับเข้าของเคสที่เพิ่มย้อนหลังและนับยอดรายวันแล้ว — ใช้ตอนลบเคสเพื่อหักยอดคืน */
+export const BACKFILL_MARK = 'บันทึกย้อนหลัง · นับยอดรายวันแล้ว';
+/** อ่านว่าเคสนี้เคยนับยอดรายวันย้อนหลังไว้ไหม และอุปกรณ์อะไร */
+export const backfillInfo = (logs: LogEntry[]) => {
+  const admit = logs.find((l) => l.event === 'admit' && l.note.startsWith(BACKFILL_MARK));
+  if (!admit) return { counted: false, devices: {} as Partial<Record<DeviceKey, boolean>> };
+  const m = admit.note.match(/\(อุปกรณ์: ([^)]*)\)/);
+  const names = m ? m[1].split(',').map((x) => x.trim()) : [];
+  return { counted: true, devices: Object.fromEntries(DEVICES.filter((d) => names.includes(d.label)).map((d) => [d.key, true])) as Partial<Record<DeviceKey, boolean>> };
+};
+
+/**
+ * ลบเคสออกจากทะเบียน (บันทึกผิด/ซ้ำ): ลบทุกแถวของเคส และหักยอดรายวันคืน
+ * (รับใหม่ · Refer/เสียชีวิต · และถ้า reverseCensus: ผู้ป่วยในวอร์ด/อุปกรณ์ของวันที่นอนอยู่)
+ */
+export const deleteCase = (data: IcuData, out: LogEntry, opts: { reverseCensus: boolean }): ActionResult => {
+  const related = caseLogs(data.logs, out);
+  const delta: DailyDelta = new Map();
+  const admit = related.find((l) => l.event === 'admit');
+  if (admit) addDelta(delta, logTime(admit.timestamp).slice(0, 10), 'admittedNew', -1);
+  const outKey = OUT_COUNT[out.event];
+  if (outKey) addDelta(delta, logTime(out.timestamp).slice(0, 10), outKey, -1);
+  if (opts.reverseCensus) {
+    const info = backfillInfo(related);
+    stayDays(logTime(out.admittedAt), logTime(out.timestamp)).forEach((d) => {
+      addDelta(delta, d, 'totalInWard', -1);
+      DEVICES.forEach((dv) => info.devices[dv.key] && addDelta(delta, d, dv.dailyKey, -1));
+    });
+  }
+  const res = applyDelta(data.daily, delta);
+  const gone = related.filter((l) => l.row).map((l) => l.row!) ;
+  // แถวที่อยู่ใต้แถวที่ลบจะเลื่อนขึ้นในชีต → ปรับเลขแถวในเครื่องให้ตรง
+  const logs = data.logs
+    .filter((l) => !related.includes(l))
+    .map((l) => (l.row ? { ...l, row: l.row - gone.filter((r) => r < l.row!).length } : l));
+  const rows = related.filter((l) => l.row).map((l) => ({ row: l.row!, caseCode: l.caseCode, bedNumber: l.bedNumber }));
+  return {
+    next: { ...data, logs, daily: res.daily },
+    ops: [...res.ops, ...(rows.length ? [{ type: 'deleteLog', rows } as SheetOp] : [])],
+  };
+};
+
 export interface PastCase {
   bedNumber: string;
   caseCode: string;
@@ -478,7 +520,9 @@ export const addPastCase = (data: IcuData, c: PastCase): ActionResult => {
   const admittedAt = logTime(c.admittedAt);
   const outAt = logTime(c.outAt);
   const base = { bedNumber: c.bedNumber, caseCode: c.caseCode.trim(), acuity: c.acuity, admittedAt };
-  const admit: LogEntry = { ...base, timestamp: admittedAt, event: 'admit', note: 'บันทึกย้อนหลัง' };
+  const used = DEVICES.filter((d) => c.devices[d.key]).map((d) => d.label);
+  const admitNote = c.backfill ? `${BACKFILL_MARK}${used.length ? ` (อุปกรณ์: ${used.join(', ')})` : ''}` : 'บันทึกย้อนหลัง';
+  const admit: LogEntry = { ...base, timestamp: admittedAt, event: 'admit', note: admitNote };
   const out: LogEntry = { ...base, timestamp: outAt, event: c.event, note: c.note };
   const delta: DailyDelta = new Map();
   addDelta(delta, admittedAt.slice(0, 10), 'admittedNew', 1);

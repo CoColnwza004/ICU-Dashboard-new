@@ -75,12 +75,13 @@ export const pastSource = (data: IcuData, date: string, shift: ShiftKey, snap?: 
       const rows = JSON.parse(snap.beds) as Record<string, unknown>[];
       const saved = rows.map(normalizeBed).filter((b) => b.bedNumber);
       if (saved.length) {
-        const at = parseLocalDateTime(String(snap.savedAt).replace(' ', 'T')) ?? w.endAt;
-        // เติม/แก้ตามทะเบียน: รับเข้าหรือจำหน่ายที่บันทึกย้อนหลังหลังจากชั่วโมงนั้น
-        const { beds, changed } = reconcileBeds(saved, data.logs, toLocalDateTime(at));
+        const savedAt = parseLocalDateTime(String(snap.savedAt).replace(' ', 'T')) ?? w.endAt;
+        // เติม/แก้ตามทะเบียนจนถึงสิ้นเวร: รับเข้า/จำหน่ายหลังภาพบันทึกชั่วโมงสุดท้าย หรือที่บันทึกย้อนหลังภายหลัง
+        const lastMinute = toLocalDateTime(new Date(w.endAt.getTime() - 60_000));
+        const { beds, changed } = reconcileBeds(saved, data.logs, lastMinute);
         const daily = changed ? findDaily(data.daily, date) : undefined;
         const devices = daily ? Object.fromEntries(DEVICES.map((d) => [d.dailyKey, daily[d.dailyKey]])) : countsFromBeds(beds);
-        return { date, shift, at, beds, devices, mode: 'snapshot', adjusted: changed };
+        return { date, shift, at: changed ? w.endAt : savedAt, beds, devices, mode: 'snapshot', adjusted: changed };
       }
     } catch {
       /* ข้อมูลเสีย → ประมาณการแทน */
@@ -140,7 +141,7 @@ export function ShiftReport({ src }: { src: ReportSource }) {
     src.mode === 'reconstructed'
       ? `${String(w.def.end).padStart(2, '0')}:00`
       : src.at.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
-  const timeLabel = src.mode === 'reconstructed' ? 'ข้อมูล ณ สิ้นเวร' : src.mode === 'snapshot' ? 'บันทึกจากระบบเมื่อ' : 'ข้อมูล ณ เวลา';
+  const timeLabel = src.mode === 'reconstructed' || src.adjusted ? 'ข้อมูล ณ สิ้นเวร' : src.mode === 'snapshot' ? 'บันทึกจากระบบเมื่อ' : 'ข้อมูล ณ เวลา';
 
   return (
     <div style={LIGHT} className="px-7 py-5">
@@ -168,7 +169,7 @@ export function ShiftReport({ src }: { src: ReportSource }) {
               )}
               {src.mode === 'snapshot' && (
                 <span className="ml-2 rounded-full bg-[#e8f3ff] px-2 py-0.5 text-[11px] font-medium text-[#0059b3]">
-                  ย้อนหลัง · จากบันทึกสถานะเตียงรายชั่วโมง{src.adjusted ? ' + รายการที่บันทึกย้อนหลังในทะเบียน' : ''}
+                  ย้อนหลัง · จากบันทึกสถานะเตียงรายชั่วโมง{src.adjusted ? ' + ปรับตามทะเบียนรับ-จำหน่ายถึงสิ้นเวร' : ''}
                 </span>
               )}
             </p>

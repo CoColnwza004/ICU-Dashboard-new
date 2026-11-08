@@ -1,8 +1,8 @@
-import { Activity, Download, Printer, Ambulance, ArrowUpRight, BedDouble, ChevronRight, Clock, HeartCrack, Pencil, Plus, Repeat, Timer, UserPlus, Wind } from 'lucide-react';
+import { Activity, Download, Printer, Ambulance, ArrowUpRight, BedDouble, ChevronRight, Clock, HeartCrack, Pencil, Plus, Repeat, Trash2, Timer, UserPlus, Wind } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { ACUITIES, DEVICES, EVENT_META, INDICATORS } from '../lib/constants';
 import { fmtDateLong, fmtDateShort, fmtDateTime, fmtDayMonth, fmtMonth, parseLocalDateTime, toLocalDateTime } from '../lib/date';
-import { addPastCase, availableMonths, editCase, logTime, monthlySummary, stayDays } from '../lib/logic';
+import { addPastCase, availableMonths, backfillInfo, caseLogs, deleteCase, editCase, logTime, monthlySummary, stayDays } from '../lib/logic';
 import { sheetLink } from '../lib/sheetApi';
 import { fmtStat, STAT_DEFS, statsFor } from '../lib/stats';
 import { useStore } from '../lib/store';
@@ -300,16 +300,29 @@ export function Monthly({
 
 /** แก้เคสที่จำหน่ายแล้วย้อนหลัง: เวลารับเข้า · เวลาจำหน่าย · หมายเหตุ */
 function EditCaseDialog({ entry, onClose }: { entry: LogEntry | null; onClose: () => void }) {
-  const { commit } = useStore();
+  const { data, commit } = useStore();
   const [inAt, setInAt] = useState('');
   const [outAt, setOutAt] = useState('');
   const [note, setNote] = useState('');
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [reverseCensus, setReverseCensus] = useState(false);
+  const related = useMemo(() => (entry ? caseLogs(data.logs, entry) : []), [data.logs, entry]);
+  const info = useMemo(() => backfillInfo(related), [related]);
   useEffect(() => {
     if (!entry) return;
     setInAt(logTime(entry.admittedAt));
     setOutAt(logTime(entry.timestamp));
     setNote(entry.note);
+    setConfirmDelete(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [entry]);
+  useEffect(() => setReverseCensus(info.counted), [info.counted]);
+  const stay = entry ? stayDays(logTime(entry.admittedAt), logTime(entry.timestamp)) : [];
+  const remove = () => {
+    if (!entry) return;
+    void commit((d) => deleteCase(d, entry, { reverseCensus }), `ลบเคส ${entry.caseCode || entry.bedNumber} แล้ว`);
+    onClose();
+  };
 
   const now = toLocalDateTime();
   const error = !inAt || !outAt
@@ -323,7 +336,7 @@ function EditCaseDialog({ entry, onClose }: { entry: LogEntry | null; onClose: (
   const b = parseLocalDateTime(outAt);
   const los = a && b && b >= a ? (b.getTime() - a.getTime()) / 86_400_000 : null;
   const changed = !!entry && (inAt !== logTime(entry.admittedAt) || outAt !== logTime(entry.timestamp) || note !== entry.note);
-  const unsynced = !!entry && entry.row === undefined;
+  const unsynced = !!entry && related.some((l) => l.row === undefined);
 
   const save = () => {
     if (!entry || error || !changed) return;
@@ -335,19 +348,64 @@ function EditCaseDialog({ entry, onClose }: { entry: LogEntry | null; onClose: (
     <Modal
       open={!!entry}
       onClose={onClose}
-      title="แก้ไขเคสย้อนหลัง"
+      title={confirmDelete ? 'ลบเคสนี้ออกจากทะเบียน' : 'แก้ไขเคสย้อนหลัง'}
       subtitle={entry ? `${entry.caseCode || 'ไม่ระบุรหัสเคส'} · เตียง ${entry.bedNumber} · ${EVENT_META[entry.event].label}` : undefined}
       footer={
-        <>
-          <Button variant="ghost" onClick={onClose}>
-            ยกเลิก
-          </Button>
-          <Button variant="primary" onClick={save} disabled={!!error || !changed || unsynced}>
-            บันทึก
-          </Button>
-        </>
+        confirmDelete ? (
+          <>
+            <Button variant="ghost" onClick={() => setConfirmDelete(false)}>
+              ย้อนกลับ
+            </Button>
+            <Button variant="danger" onClick={remove} disabled={unsynced}>
+              <Trash2 className="size-4" strokeWidth={1.8} />
+              ยืนยันลบเคส
+            </Button>
+          </>
+        ) : (
+          <>
+            <Button variant="danger" className="mr-auto" onClick={() => setConfirmDelete(true)} disabled={unsynced}>
+              <Trash2 className="size-4" strokeWidth={1.8} />
+              ลบเคส
+            </Button>
+            <Button variant="ghost" onClick={onClose}>
+              ยกเลิก
+            </Button>
+            <Button variant="primary" onClick={save} disabled={!!error || !changed || unsynced}>
+              บันทึก
+            </Button>
+          </>
+        )
       }
     >
+      {confirmDelete && entry ? (
+        <div className="space-y-4">
+          <p className="text-[15px] text-ink-2">
+            ลบ {related.length} แถวของเคสนี้ออกจากแท็บ Log (รับเข้า {fmtDateTime(entry.admittedAt)} → {EVENT_META[entry.event].label}{' '}
+            {fmtDateTime(entry.timestamp)}) และหักยอดคืนในบันทึกรายวัน:
+          </p>
+          <ul className="well space-y-1 px-4 py-3 text-[14px] text-ink-2">
+            {related.some((l) => l.event === 'admit') && <li>· รับใหม่ −1 ในวันที่ {fmtDateTime(entry.admittedAt).split(' ').slice(0, 2).join(' ')}</li>}
+            {(entry.event === 'refer' || entry.event === 'ward' || entry.event === 'expired') && (
+              <li>
+                · {entry.event === 'expired' ? 'เสียชีวิต' : 'Refer / ย้ายวอร์ด'} −1 ในวันที่ {fmtDateTime(entry.timestamp).split(' ').slice(0, 2).join(' ')}
+              </li>
+            )}
+          </ul>
+          <div className="well px-4">
+            <Switch
+              label={`หักยอด “ผู้ป่วยในวอร์ด” ${stay.length} วันด้วย`}
+              hint={
+                info.counted
+                  ? 'เคสนี้เพิ่มย้อนหลังพร้อมนับยอดรายวันไว้ จึงเปิดให้แล้ว (รวมอุปกรณ์ที่ติ๊กไว้ตอนเพิ่ม)'
+                  : 'เปิดเฉพาะเมื่อแน่ใจว่าเคยนับผู้ป่วยรายนี้ในบันทึกรายวันของวันเหล่านั้น'
+              }
+              checked={reverseCensus}
+              onChange={setReverseCensus}
+            />
+          </div>
+          <p className="text-[13px] text-critical">ลบแล้วกู้คืนไม่ได้</p>
+        </div>
+      ) : (
       <div className="space-y-4">
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="block">
@@ -372,6 +430,7 @@ function EditCaseDialog({ entry, onClose }: { entry: LogEntry | null; onClose: (
             : 'แก้ทุกแถวของเคสนี้ในแท็บ Log และย้ายยอดรับใหม่ / Refer / เสียชีวิตในบันทึกรายวันไปวันที่ถูกต้องให้อัตโนมัติ'}
         </p>
       </div>
+      )}
     </Modal>
   );
 }
