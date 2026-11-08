@@ -230,7 +230,7 @@ export function WallView({ onExit }: { onExit: () => void }) {
           {/* อุปกรณ์ + สถิติเตียง */}
           <div className="card shrink-0 p-[1.8vmin]">
             <PanelTitle>อุปกรณ์ · วันนี้</PanelTitle>
-            <div className="grid grid-cols-4 gap-[0.7vmin]">
+            <div className="grid grid-cols-5 gap-[0.7vmin]">
               {DEVICES.map((dv) => {
                 const Icon = DEVICE_ICON[dv.key];
                 return (

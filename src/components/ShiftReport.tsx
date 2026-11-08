@@ -3,9 +3,9 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperti
 import { createPortal } from 'react-dom';
 import type { Bed, DailyKey, IcuData } from '../types';
 import { ACUITY_META, DEVICES, HOSPITAL, STATUS_META, UNIT } from '../lib/constants';
-import { daysBetween, fmtDateLong, fmtMonth, parseLocalDateTime } from '../lib/date';
+import { daysBetween, fmtDateLong, fmtMonth, parseLocalDateTime, toLocalDateTime } from '../lib/date';
 import { DEVICE_ICON, EVENT_ICON } from '../lib/icons';
-import { bedsAt, countsFromBeds, findDaily, flowBetween, flowCounts, normalizeBed, occupied } from '../lib/logic';
+import { bedsAt, countsFromBeds, findDaily, flowBetween, flowCounts, normalizeBed, occupied, reconcileBeds } from '../lib/logic';
 import { fetchShift, type ShiftRow } from '../lib/sheetApi';
 import { exportPdf, exportPng } from '../lib/pdf';
 import { isNurse, ratioText, realName, SHIFTS, shiftWindow, shiftWindowFor, teamOn, type ShiftKey } from '../lib/roster';
@@ -57,6 +57,8 @@ export interface ReportSource {
   beds: Bed[];
   devices: Partial<Record<DailyKey, number>>;
   mode: 'live' | 'snapshot' | 'reconstructed';
+  /** รวมรายการที่บันทึกย้อนหลังในทะเบียนแล้ว (ปรับจากภาพบันทึกรายชั่วโมง) */
+  adjusted?: boolean;
 }
 
 /** เวรปัจจุบัน: ใช้ข้อมูลสด */
@@ -71,10 +73,14 @@ export const pastSource = (data: IcuData, date: string, shift: ShiftKey, snap?: 
   if (snap?.beds) {
     try {
       const rows = JSON.parse(snap.beds) as Record<string, unknown>[];
-      const beds = rows.map(normalizeBed).filter((b) => b.bedNumber);
-      if (beds.length) {
+      const saved = rows.map(normalizeBed).filter((b) => b.bedNumber);
+      if (saved.length) {
         const at = parseLocalDateTime(String(snap.savedAt).replace(' ', 'T')) ?? w.endAt;
-        return { date, shift, at, beds, devices: countsFromBeds(beds), mode: 'snapshot' };
+        // เติม/แก้ตามทะเบียน: รับเข้าหรือจำหน่ายที่บันทึกย้อนหลังหลังจากชั่วโมงนั้น
+        const { beds, changed } = reconcileBeds(saved, data.logs, toLocalDateTime(at));
+        const daily = changed ? findDaily(data.daily, date) : undefined;
+        const devices = daily ? Object.fromEntries(DEVICES.map((d) => [d.dailyKey, daily[d.dailyKey]])) : countsFromBeds(beds);
+        return { date, shift, at, beds, devices, mode: 'snapshot', adjusted: changed };
       }
     } catch {
       /* ข้อมูลเสีย → ประมาณการแทน */
@@ -161,7 +167,9 @@ export function ShiftReport({ src }: { src: ReportSource }) {
                 </span>
               )}
               {src.mode === 'snapshot' && (
-                <span className="ml-2 rounded-full bg-[#e8f3ff] px-2 py-0.5 text-[11px] font-medium text-[#0059b3]">ย้อนหลัง · จากบันทึกสถานะเตียงรายชั่วโมง</span>
+                <span className="ml-2 rounded-full bg-[#e8f3ff] px-2 py-0.5 text-[11px] font-medium text-[#0059b3]">
+                  ย้อนหลัง · จากบันทึกสถานะเตียงรายชั่วโมง{src.adjusted ? ' + รายการที่บันทึกย้อนหลังในทะเบียน' : ''}
+                </span>
               )}
             </p>
           </div>
@@ -225,8 +233,8 @@ export function ShiftReport({ src }: { src: ReportSource }) {
           })}
         </div>
             {/* อุปกรณ์ */}
-          <Panel title={src.mode === 'reconstructed' ? 'อุปกรณ์ · บันทึกรายวัน' : 'อุปกรณ์ · ณ เวลารายงาน'}>
-            <div className="grid grid-cols-8 gap-1.5">
+          <Panel title={src.mode === 'reconstructed' || src.adjusted ? 'อุปกรณ์ · บันทึกรายวัน' : 'อุปกรณ์ · ณ เวลารายงาน'}>
+            <div className="grid grid-cols-5 gap-1.5">
               {DEVICES.map((d) => {
                 const Icon = DEVICE_ICON[d.key];
                 return (

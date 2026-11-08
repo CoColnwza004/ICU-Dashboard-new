@@ -321,6 +321,47 @@ export type PatientInput = Pick<
   'caseCode' | 'acuity' | 'ageGroup' | 'gender' | 'clinicalGoals' | (typeof DEVICES)[number]['key']
 > & { admittedAt?: string };
 
+/**
+ * ปรับสถานะเตียงที่บันทึกไว้ ณ เวลา `at` ให้ตรงกับทะเบียน (รวมรายการที่บันทึกย้อนหลังภายหลัง):
+ * - ทะเบียนบอกว่าเคสนี้จำหน่ายไปแล้ว ณ เวลานั้น แต่ภาพบันทึกยังแสดงอยู่ → เปลี่ยนเป็น "ทำความสะอาด"
+ * - ทะเบียนบอกว่าเคสนี้อยู่ในเตียง ณ เวลานั้น แต่ภาพบันทึกไม่มี (ลืมกดรับ แล้วรับย้อนหลัง) → เติมเข้าเตียงนั้น
+ * เคสที่ไม่มีในทะเบียนไม่ถูกแตะ
+ */
+export const reconcileBeds = (beds: Bed[], logs: LogEntry[], at: string) => {
+  const last = new Map<string, LogEntry>();
+  logs
+    .filter((l) => l.caseCode && logTime(l.timestamp) <= at)
+    .sort((a, b) => logTime(a.timestamp).localeCompare(logTime(b.timestamp)))
+    .forEach((l) => last.set(l.caseCode, l));
+  let changed = false;
+  const next = beds.map((b) => {
+    const st = b.status === 'occupied' && b.caseCode ? last.get(b.caseCode) : undefined;
+    if (st && EVENT_META[st.event].out) {
+      changed = true;
+      return { ...emptyBed(b.bedNumber), row: b.row, status: 'cleaning' as const, updatedAt: st.timestamp };
+    }
+    return b;
+  });
+  const present = new Set(next.filter((b) => b.status === 'occupied').map((b) => b.caseCode));
+  last.forEach((l) => {
+    if (EVENT_META[l.event].out || present.has(l.caseCode)) return;
+    const i = next.findIndex((b) => b.bedNumber === l.bedNumber);
+    if (i < 0 || next[i].status === 'occupied') return;
+    next[i] = {
+      ...emptyBed(l.bedNumber),
+      row: next[i].row,
+      status: 'occupied',
+      caseCode: l.caseCode,
+      acuity: toAcuity(l.acuity),
+      admittedAt: l.admittedAt,
+      updatedAt: l.timestamp,
+    };
+    present.add(l.caseCode);
+    changed = true;
+  });
+  return { beds: next, changed };
+};
+
 /** วันที่ (yyyy-MM-dd) ที่ผู้ป่วยอยู่ในวอร์ด ตั้งแต่วันรับเข้าถึงวันก่อนจำหน่าย (จำหน่ายวันเดียวกัน = นับวันรับเข้า 1 วัน) · ยังไม่จำหน่าย → ถึงเมื่อวาน */
 export const stayDays = (inAt: string, outAt: string | null) => {
   const first = inAt.slice(0, 10);
