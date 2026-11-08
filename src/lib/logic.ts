@@ -8,6 +8,7 @@ import type {
   BedStatus,
   DailyKey,
   DailyRecord,
+  DeviceKey,
   Gender,
   IcuData,
   LogEntry,
@@ -39,6 +40,8 @@ export const emptyPatient = (): Omit<Bed, 'bedNumber' | 'status' | 'updatedAt' |
   hasPiHome: false,
   hasHapBundle: false,
   hasBradenUnder12: false,
+  hasHighFlow: false,
+  hasCannula: false,
 });
 
 export const emptyBed = (bedNumber: string): Bed => ({
@@ -318,14 +321,67 @@ export type PatientInput = Pick<
   'caseCode' | 'acuity' | 'ageGroup' | 'gender' | 'clinicalGoals' | (typeof DEVICES)[number]['key']
 > & { admittedAt?: string };
 
-export const admitPatient = (data: IcuData, bedNumber: string, p: PatientInput): ActionResult => {
+/** วันที่ (yyyy-MM-dd) ที่ผู้ป่วยอยู่ในวอร์ด ตั้งแต่วันรับเข้าถึงวันก่อนจำหน่าย (จำหน่ายวันเดียวกัน = นับวันรับเข้า 1 วัน) · ยังไม่จำหน่าย → ถึงเมื่อวาน */
+export const stayDays = (inAt: string, outAt: string | null) => {
+  const first = inAt.slice(0, 10);
+  const end = outAt ? outAt.slice(0, 10) : todayKey();
+  const days: string[] = [];
+  for (let d = first; d < end; d = shiftDate(d, 1)) days.push(d);
+  if (outAt && !days.length) days.push(first);
+  return days;
+};
+
+type DailyDelta = Map<string, Partial<Record<DailyKey, number>>>;
+const addDelta = (delta: DailyDelta, day: string, key: DailyKey, n: number) => {
+  const a = delta.get(day) ?? {};
+  a[key] = (a[key] ?? 0) + n;
+  delta.set(day, a);
+};
+/** บวก/ลบยอดรายวันหลายวันพร้อมกัน (ไม่ติดลบ) */
+const applyDelta = (daily: DailyRecord[], delta: DailyDelta) => {
+  const ops: SheetOp[] = [];
+  delta.forEach((inc, day) => {
+    const keys = (Object.keys(inc) as DailyKey[]).filter((k) => inc[k]);
+    if (!keys.length) return;
+    const base = findDaily(daily, day);
+    if (!base && keys.every((k) => (inc[k] ?? 0) <= 0)) return;
+    const rec = base ?? emptyDaily(day);
+    const patch: Partial<DailyRecord> = {};
+    keys.forEach((k) => (patch[k] = Math.max(0, rec[k] + (inc[k] ?? 0))));
+    daily = putDaily(daily, { ...rec, ...patch });
+    ops.push({ type: 'upsertDaily', record: { date: day, ...patch } });
+  });
+  return { daily, ops };
+};
+/** ผู้ป่วยในวอร์ด + อุปกรณ์ที่ติ๊กไว้ +1 ในแต่ละวันที่นอนอยู่ */
+const addCensus = (delta: DailyDelta, days: string[], flags: Partial<Record<DeviceKey, boolean>>) => {
+  days.forEach((d) => {
+    addDelta(delta, d, 'totalInWard', 1);
+    DEVICES.forEach((dv) => flags[dv.key] && addDelta(delta, d, dv.dailyKey, 1));
+  });
+};
+
+/**
+ * รับผู้ป่วยเข้าเตียง · เวลารับเข้าย้อนหลังได้ (ลืมกดรับ):
+ * ยอดรับใหม่นับเข้าวันที่รับจริง · backfill = เพิ่มยอดผู้ป่วยในวอร์ด/อุปกรณ์ของวันก่อนหน้าที่ขาดไป
+ */
+export const admitPatient = (data: IcuData, bedNumber: string, p: PatientInput, opts: { backfill?: boolean } = {}): ActionResult => {
   const prev = data.beds.find((b) => b.bedNumber === bedNumber) ?? emptyBed(bedNumber);
-  const admittedAt = p.admittedAt || toLocalDateTime();
-  const bed: Bed = { ...prev, ...p, admittedAt, status: 'occupied', updatedAt: toLocalDateTime() };
+  const now = toLocalDateTime();
+  const admittedAt = logTime(p.admittedAt || now) > now ? now : logTime(p.admittedAt || now);
+  const bed: Bed = { ...prev, ...p, admittedAt, status: 'occupied', updatedAt: now };
   const beds = putBed(data.beds, bed);
-  const today = touchToday(data.daily, beds, { admittedNew: 1 });
+  const day = admittedAt.slice(0, 10);
+  const sameDay = day === todayKey();
+  const today = touchToday(data.daily, beds, sameDay ? { admittedNew: 1 } : {});
+  const delta: DailyDelta = new Map();
+  if (!sameDay) {
+    addDelta(delta, day, 'admittedNew', 1);
+    if (opts.backfill) addCensus(delta, stayDays(admittedAt, null), Object.fromEntries(DEVICES.map((d) => [d.key, bed[d.key]])));
+  }
+  const past = applyDelta(today.daily, delta);
   const entry: LogEntry = {
-    timestamp: toLocalDateTime(),
+    timestamp: admittedAt,
     event: 'admit',
     bedNumber,
     caseCode: bed.caseCode,
@@ -334,8 +390,64 @@ export const admitPatient = (data: IcuData, bedNumber: string, p: PatientInput):
     note: bed.clinicalGoals,
   };
   return {
-    next: { ...data, beds, daily: today.daily, logs: [...data.logs, entry] },
-    ops: [bedOp(bed), today.op, { type: 'appendLog', entry }],
+    next: { ...data, beds, daily: past.daily, logs: [...data.logs, entry] },
+    ops: [bedOp(bed), today.op, ...past.ops, { type: 'appendLog', entry }],
+  };
+};
+
+/** แก้เวลารับเข้าของผู้ป่วยที่ยังอยู่ในเตียง → แก้แถวรับเข้าในทะเบียน + ย้ายยอดรับใหม่ไปวันที่ถูกต้อง */
+export const retimeAdmission = (data: IcuData, bedNumber: string, oldAt: string, newAt: string): ActionResult => {
+  const bed = data.beds.find((b) => b.bedNumber === bedNumber);
+  const from = logTime(oldAt);
+  const to = logTime(newAt);
+  if (!bed || !from || !to || from === to) return { next: data, ops: [] };
+  const ops: SheetOp[] = [];
+  let admitFound = false;
+  const logs = data.logs.map((l) => {
+    if (l.caseCode !== bed.caseCode || logTime(l.admittedAt) !== from) return l;
+    const isAdmit = l.event === 'admit';
+    if (isAdmit) admitFound = true;
+    const upd = { ...l, admittedAt: to, timestamp: isAdmit ? to : l.timestamp };
+    if (l.row) ops.push({ type: 'updateLog', row: l.row, caseCode: l.caseCode, bedNumber: l.bedNumber, patch: isAdmit ? { admittedAt: to, timestamp: to } : { admittedAt: to } });
+    return upd;
+  });
+  const delta: DailyDelta = new Map();
+  if (admitFound && from.slice(0, 10) !== to.slice(0, 10)) {
+    addDelta(delta, from.slice(0, 10), 'admittedNew', -1);
+    addDelta(delta, to.slice(0, 10), 'admittedNew', 1);
+  }
+  const moved = applyDelta(data.daily, delta);
+  return { next: { ...data, logs, daily: moved.daily }, ops: [...ops, ...moved.ops] };
+};
+
+export interface PastCase {
+  bedNumber: string;
+  caseCode: string;
+  acuity: Acuity | '';
+  admittedAt: string;
+  outAt: string;
+  event: OutEvent;
+  note: string;
+  devices: Partial<Record<DeviceKey, boolean>>;
+  backfill: boolean;
+}
+
+/** เพิ่มเคสที่ลืมบันทึกทั้งรับเข้าและจำหน่าย (ผู้ป่วยออกไปแล้ว) → ทะเบียน 2 แถว + ยอดรายวันของวันเหล่านั้น */
+export const addPastCase = (data: IcuData, c: PastCase): ActionResult => {
+  const admittedAt = logTime(c.admittedAt);
+  const outAt = logTime(c.outAt);
+  const base = { bedNumber: c.bedNumber, caseCode: c.caseCode.trim(), acuity: c.acuity, admittedAt };
+  const admit: LogEntry = { ...base, timestamp: admittedAt, event: 'admit', note: 'บันทึกย้อนหลัง' };
+  const out: LogEntry = { ...base, timestamp: outAt, event: c.event, note: c.note };
+  const delta: DailyDelta = new Map();
+  addDelta(delta, admittedAt.slice(0, 10), 'admittedNew', 1);
+  const outKey = OUT_COUNT[c.event];
+  if (outKey) addDelta(delta, outAt.slice(0, 10), outKey, 1);
+  if (c.backfill) addCensus(delta, stayDays(admittedAt, outAt), c.devices);
+  const res = applyDelta(data.daily, delta);
+  return {
+    next: { ...data, daily: res.daily, logs: [...data.logs, admit, out] },
+    ops: [...res.ops, { type: 'appendLog', entry: admit }, { type: 'appendLog', entry: out }],
   };
 };
 
@@ -473,29 +585,18 @@ export const editCase = (data: IcuData, out: LogEntry, next: { admittedAt: strin
     return Object.keys(patch).length ? upd : l;
   });
   // ยอดรายวันที่ต้องย้ายวัน
-  const delta = new Map<string, Partial<Record<DailyKey, number>>>();
+  const delta: DailyDelta = new Map();
   const move = (key: DailyKey, from: string, to: string) => {
     if (from === to) return;
-    const a = delta.get(from) ?? {};
-    a[key] = (a[key] ?? 0) - 1;
-    delta.set(from, a);
-    const b = delta.get(to) ?? {};
-    b[key] = (b[key] ?? 0) + 1;
-    delta.set(to, b);
+    addDelta(delta, from, key, -1);
+    addDelta(delta, to, key, 1);
   };
   if (related.some((l) => l.event === 'admit')) move('admittedNew', oldIn.slice(0, 10), next.admittedAt.slice(0, 10));
   const outKey = OUT_COUNT[out.event];
   if (outKey) move(outKey, oldOut.slice(0, 10), next.outAt.slice(0, 10));
-  let daily = data.daily;
-  delta.forEach((inc, day) => {
-    const base = findDaily(daily, day);
-    if (!base && Object.values(inc).every((v) => (v ?? 0) <= 0)) return;
-    const rec = base ?? emptyDaily(day);
-    const patch: Partial<DailyRecord> = {};
-    (Object.keys(inc) as DailyKey[]).forEach((k) => (patch[k] = Math.max(0, rec[k] + (inc[k] ?? 0))));
-    daily = putDaily(daily, { ...rec, ...patch });
-    ops.push({ type: 'upsertDaily', record: { date: day, ...patch } });
-  });
+  const moved = applyDelta(data.daily, delta);
+  ops.push(...moved.ops);
+  const daily = moved.daily;
   return { next: { ...data, logs, daily }, ops };
 };
 
@@ -812,6 +913,8 @@ export const demoData = (): IcuData => {
       piHomeCount: rnd() > 0.85 ? 1 : 0,
       hapBundleCount: vent,
       bradenUnder12Count: Math.min(census, rnd() > 0.6 ? 1 : 0),
+      highFlowCount: rnd() > 0.6 ? 1 : 0,
+      cannulaCount: rnd() > 0.5 ? 1 : 0,
     });
   }
   const now = new Date();

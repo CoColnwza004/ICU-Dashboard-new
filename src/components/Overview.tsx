@@ -228,7 +228,7 @@ export function Overview({
         <div className="card p-6 sm:p-7 lg:col-span-2">
           <div className="mb-5 flex items-start justify-between gap-4">
             <div>
-              <p className="eyebrow">12 ตัวชี้วัด · {fmtDateShort(today)}</p>
+              <p className="eyebrow">14 ตัวชี้วัด · {fmtDateShort(today)}</p>
               <h3 className="display mt-1 text-[22px]">สรุปวันนี้</h3>
             </div>
             <button type="button" onClick={() => onView('indicators')} className="link inline-flex items-center text-[14px]">

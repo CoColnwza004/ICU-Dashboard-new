@@ -1,4 +1,5 @@
 import {
+  AirVent,
   Ambulance,
   ArrowLeftRight,
   ArrowRightLeft,
@@ -15,6 +16,7 @@ import {
   Syringe,
   UserPlus,
   Users,
+  Waves,
   Wind,
   type LucideIcon,
 } from 'lucide-react';
@@ -29,6 +31,8 @@ export const DEVICE_ICON: Record<DeviceKey, LucideIcon> = {
   hasPiHome: Bandage,
   hasHapBundle: ShieldCheck,
   hasBradenUnder12: Flame,
+  hasHighFlow: Waves,
+  hasCannula: AirVent,
 };
 
 export const INDICATOR_ICON: Record<DailyKey, LucideIcon> = {
@@ -44,6 +48,8 @@ export const INDICATOR_ICON: Record<DailyKey, LucideIcon> = {
   piHomeCount: Bandage,
   hapBundleCount: ShieldCheck,
   bradenUnder12Count: Flame,
+  highFlowCount: Waves,
+  cannulaCount: AirVent,
 };
 
 export const EVENT_ICON: Record<LogEvent, LucideIcon> = {

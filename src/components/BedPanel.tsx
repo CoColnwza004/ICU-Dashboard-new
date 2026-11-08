@@ -10,6 +10,8 @@ import {
   emptyPatient,
   movePatient,
   pastDestinations,
+  retimeAdmission,
+  stayDays,
   updateBed,
   type OutDetail,
   type PatientInput,
@@ -64,6 +66,7 @@ export function BedPanel({ bedNumber, onClose }: { bedNumber: string | null; onC
   const [outEvent, setOutEvent] = useState<OutEvent>('home');
   const [out, setOut] = useState<OutDetail>({});
   const [outAt, setOutAt] = useState('');
+  const [backfill, setBackfill] = useState(true);
   const setOutField = (k: keyof OutDetail, v: string) => setOut((o) => ({ ...o, [k]: v }));
 
   // รีเซ็ตฟอร์มเมื่อเปิดเตียงใหม่เท่านั้น (ไม่รีเซ็ตทุกครั้งที่ข้อมูลจากชีตรีเฟรช)
@@ -77,6 +80,7 @@ export function BedPanel({ bedNumber, onClose }: { bedNumber: string | null; onC
     setOutEvent('home');
     setOut({});
     setOutAt('');
+    setBackfill(true);
     if (b?.status === 'occupied') setForm(toForm(b));
     else setForm({ ...emptyPatient(), acuity: 'Critical', caseCode: nextCaseCode(data.beds, bedNumber) });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -84,12 +88,23 @@ export function BedPanel({ bedNumber, onClose }: { bedNumber: string | null; onC
 
   const set = <K extends keyof PatientInput>(k: K, v: PatientInput[K]) => setForm((f) => ({ ...f, [k]: v }));
 
+  // เวลารับเข้า: ย้อนหลังได้ (ลืมกดรับ) แต่ห้ามเกินเวลาปัจจุบัน
+  const inAt = (form.admittedAt || (mode === 'admit' ? toLocalDateTime() : '')).replace(' ', 'T').slice(0, 16);
+  const inAtError = inAt && inAt > toLocalDateTime() ? 'เวลารับเข้าต้องไม่เกินเวลาปัจจุบัน' : '';
+  const backDays = mode === 'admit' && inAt && !inAtError ? stayDays(inAt, null) : [];
+
   const submit = () => {
-    if (!target) return;
+    if (!target || inAtError) return;
     if (mode === 'admit') {
-      void commit((d) => admitPatient(d, target, form), `รับผู้ป่วยเข้า ${target} แล้ว`);
+      const late = backDays.length ? ` (รับเข้า ${fmtDateTime(inAt)})` : '';
+      void commit((d) => admitPatient(d, target, form, { backfill }), `รับผู้ป่วยเข้า ${target} แล้ว${late}`);
     } else {
-      void commit((d) => updateBed(d, target, form), `บันทึก ${target} แล้ว`);
+      const oldAt = bed?.admittedAt ?? '';
+      void commit((d) => {
+        const a = updateBed(d, target, form);
+        const b = retimeAdmission(a.next, target, oldAt, form.admittedAt ?? oldAt);
+        return { next: b.next, ops: [...a.ops, ...b.ops] };
+      }, `บันทึก ${target} แล้ว`);
     }
     onClose();
   };
@@ -157,7 +172,7 @@ export function BedPanel({ bedNumber, onClose }: { bedNumber: string | null; onC
             <Button variant="ghost" onClick={onClose}>
               ยกเลิก
             </Button>
-            <Button variant="primary" onClick={submit} disabled={!target}>
+            <Button variant="primary" onClick={submit} disabled={!target || !!inAtError}>
               {mode === 'admit' ? 'รับเข้าเตียง' : 'บันทึก'}
             </Button>
           </>
@@ -362,9 +377,16 @@ export function BedPanel({ bedNumber, onClose }: { bedNumber: string | null; onC
                 <input
                   type="datetime-local"
                   className="field"
-                  value={(form.admittedAt || (mode === 'admit' ? toLocalDateTime() : '')).slice(0, 16)}
+                  value={inAt}
+                  max={toLocalDateTime()}
                   onChange={(e) => set('admittedAt', e.target.value)}
+                  aria-invalid={!!inAtError}
                 />
+                {inAtError ? (
+                  <span className="mt-1.5 block text-[12px] text-critical">{inAtError}</span>
+                ) : (
+                  <span className="mt-1.5 block text-[12px] text-ink-3">ลืมกดรับ? ใส่เวลาที่รับเข้าจริงย้อนหลังได้</span>
+                )}
               </Field>
               <Field label="ช่วงอายุ">
                 <select className="field" value={form.ageGroup} onChange={(e) => set('ageGroup', e.target.value)}>
@@ -389,6 +411,19 @@ export function BedPanel({ bedNumber, onClose }: { bedNumber: string | null; onC
                 />
               </Field>
             </div>
+            {backDays.length > 0 && (
+              <div className="well mt-3 space-y-2 px-4 py-3 text-[13px] text-ink-2">
+                <p>
+                  <span className="font-medium text-ink">รับเข้าย้อนหลัง</span> · ยอดรับใหม่จะนับเข้าวันที่ {fmtDateTime(inAt).split(' ').slice(0, 2).join(' ')} ตามเวลาที่รับจริง
+                </p>
+                <Switch
+                  label={`เพิ่มยอด “ผู้ป่วยในวอร์ด” ย้อนหลัง ${backDays.length} วัน`}
+                  hint="นับผู้ป่วยรายนี้ (และอุปกรณ์ที่ติ๊กไว้ด้านล่าง) เข้าไปในบันทึกรายวันของวันที่ผ่านมา · ปิดถ้ายอดวันก่อน ๆ ถูกต้องอยู่แล้ว"
+                  checked={backfill}
+                  onChange={setBackfill}
+                />
+              </div>
+            )}
           </Group>
 
           <Group title="ระดับความรุนแรง">

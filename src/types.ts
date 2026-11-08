@@ -2,7 +2,7 @@ export type BedStatus = 'available' | 'occupied' | 'cleaning';
 export type Acuity = 'Critical' | 'High' | 'Moderate' | 'Stable';
 export type Gender = 'ชาย' | 'หญิง' | 'อื่นๆ' | '';
 
-/** 8 อุปกรณ์ / ตัวชี้วัดคุณภาพรายผู้ป่วย */
+/** 10 อุปกรณ์ / ตัวชี้วัดคุณภาพรายผู้ป่วย */
 export type DeviceKey =
   | 'onVentilator'
   | 'hasCLine'
@@ -11,7 +11,9 @@ export type DeviceKey =
   | 'hasIvHl'
   | 'hasPiHome'
   | 'hasHapBundle'
-  | 'hasBradenUnder12';
+  | 'hasBradenUnder12'
+  | 'hasHighFlow'
+  | 'hasCannula';
 
 /** 1 เตียง = 1 แถวในแท็บ Beds (ไม่มีข้อมูลระบุตัวตนผู้ป่วย) */
 export interface Bed extends Record<DeviceKey, boolean> {
@@ -39,7 +41,9 @@ export type DailyKey =
   | 'ivHlCount'
   | 'piHomeCount'
   | 'hapBundleCount'
-  | 'bradenUnder12Count';
+  | 'bradenUnder12Count'
+  | 'highFlowCount'
+  | 'cannulaCount';
 
 /** 1 วัน = 1 แถวในแท็บ Daily */
 export interface DailyRecord extends Record<DailyKey, number> {

@@ -15,6 +15,8 @@ export interface DeviceDef {
 /** อุปกรณ์ / ตัวชี้วัดคุณภาพรายเตียง — ลำดับตรงกับคอลัมน์ G..N ในแท็บ Beds */
 export const DEVICES: DeviceDef[] = [
   { key: 'onVentilator', dailyKey: 'ventilatorCount', label: 'Ventilator', th: 'เครื่องช่วยหายใจ' },
+  { key: 'hasHighFlow', dailyKey: 'highFlowCount', label: 'High flow', th: 'High flow nasal cannula (HFNC)' },
+  { key: 'hasCannula', dailyKey: 'cannulaCount', label: 'Cannula', th: 'ออกซิเจน Nasal cannula' },
   { key: 'hasCLine', dailyKey: 'cLineCount', label: 'C-Line', th: 'สายสวนหลอดเลือดดำส่วนกลาง' },
   { key: 'hasFoley', dailyKey: 'foleyCount', label: 'Foley', th: 'สายสวนปัสสาวะ' },
   { key: 'hasMdr', dailyKey: 'mdrCount', label: 'MDR', th: 'เชื้อดื้อยา' },
@@ -35,20 +37,22 @@ export interface IndicatorDef {
   group: IndicatorGroup;
 }
 
-/** 12 ตัวชี้วัดรายวัน — ลำดับตรงกับคอลัมน์ B..M ในแท็บ Daily */
+/** 14 ตัวชี้วัดรายวัน — คอลัมน์ B..M ในแท็บ Daily + High flow / Cannula ต่อท้าย (O, P) */
 export const INDICATORS: IndicatorDef[] = [
   { no: 1, key: 'admittedNew', label: 'รับใหม่', th: 'New admission', unit: 'ราย', group: 'flow' },
   { no: 2, key: 'totalInWard', label: 'ผู้ป่วยในวอร์ด', th: 'Census', unit: 'ราย', group: 'flow' },
   { no: 3, key: 'referCount', label: 'Refer', th: 'ส่งต่อ / ย้ายวอร์ด', unit: 'ราย', group: 'flow' },
   { no: 4, key: 'deathCount', label: 'เสียชีวิต', th: 'Death', unit: 'ราย', group: 'flow' },
   { no: 5, key: 'ventilatorCount', label: 'Ventilator', th: 'เครื่องช่วยหายใจ', unit: 'ราย', group: 'device' },
-  { no: 6, key: 'cLineCount', label: 'C-Line', th: 'Central line', unit: 'ราย', group: 'device' },
-  { no: 7, key: 'foleyCount', label: 'Foley', th: 'สายสวนปัสสาวะ', unit: 'ราย', group: 'device' },
-  { no: 8, key: 'mdrCount', label: 'MDR', th: 'เชื้อดื้อยา', unit: 'ราย', group: 'quality' },
-  { no: 9, key: 'ivHlCount', label: 'IV/HL', th: 'สายน้ำเกลือ / HL', unit: 'ราย', group: 'device' },
-  { no: 10, key: 'piHomeCount', label: 'PI_Home', th: 'แผลกดทับจากบ้าน', unit: 'ราย', group: 'quality' },
-  { no: 11, key: 'hapBundleCount', label: 'HAP Bundle', th: 'ป้องกันปอดอักเสบ', unit: 'ราย', group: 'quality' },
-  { no: 12, key: 'bradenUnder12Count', label: 'Braden < 12', th: 'เสี่ยงแผลกดทับสูง', unit: 'ราย', group: 'quality' },
+  { no: 6, key: 'highFlowCount', label: 'High flow', th: 'HFNC', unit: 'ราย', group: 'device' },
+  { no: 7, key: 'cannulaCount', label: 'Cannula', th: 'O₂ cannula', unit: 'ราย', group: 'device' },
+  { no: 8, key: 'cLineCount', label: 'C-Line', th: 'Central line', unit: 'ราย', group: 'device' },
+  { no: 9, key: 'foleyCount', label: 'Foley', th: 'สายสวนปัสสาวะ', unit: 'ราย', group: 'device' },
+  { no: 10, key: 'mdrCount', label: 'MDR', th: 'เชื้อดื้อยา', unit: 'ราย', group: 'quality' },
+  { no: 11, key: 'ivHlCount', label: 'IV/HL', th: 'สายน้ำเกลือ / HL', unit: 'ราย', group: 'device' },
+  { no: 12, key: 'piHomeCount', label: 'PI_Home', th: 'แผลกดทับจากบ้าน', unit: 'ราย', group: 'quality' },
+  { no: 13, key: 'hapBundleCount', label: 'HAP Bundle', th: 'ป้องกันปอดอักเสบ', unit: 'ราย', group: 'quality' },
+  { no: 14, key: 'bradenUnder12Count', label: 'Braden < 12', th: 'เสี่ยงแผลกดทับสูง', unit: 'ราย', group: 'quality' },
 ];
 
 export const INDICATOR_BY_KEY = Object.fromEntries(INDICATORS.map((i) => [i.key, i])) as Record<

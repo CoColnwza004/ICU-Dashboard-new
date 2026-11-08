@@ -48,24 +48,30 @@ const BED_COLS = [
   'bedNumber', 'status', 'caseCode', 'acuity', 'ageGroup', 'gender',
   'onVentilator', 'hasCLine', 'hasFoley', 'hasMdr', 'hasIvHl', 'hasPiHome', 'hasHapBundle', 'hasBradenUnder12',
   'admittedAt', 'clinicalGoals', 'updatedAt',
+  'hasHighFlow', 'hasCannula', // เพิ่มภายหลัง: ต่อท้ายเพื่อไม่ให้คอลัมน์เดิมเลื่อน (R, S)
 ];
 const BED_HEAD = [
   'เตียง', 'สถานะ', 'รหัสเคส', 'ระดับความรุนแรง', 'ช่วงอายุ', 'เพศ',
   'Ventilator', 'C-Line', 'Foley', 'MDR', 'IV/HL', 'PI_Home', 'HAP_Bundle', 'Braden < 12',
   'วันที่รับเข้า', 'เป้าหมาย / หมายเหตุ', 'อัปเดตล่าสุด',
+  'High flow', 'Cannula',
 ];
 const BED_BOOL_FROM = 7; // คอลัมน์ G
 const BED_BOOL_COUNT = 8; // G..N
+const BED_EXTRA_BOOL_FROM = 18; // R..S (High flow, Cannula)
+const BED_EXTRA_BOOL_COUNT = 2;
 
 const DAILY_COLS = [
   'date', 'admittedNew', 'totalInWard', 'referCount', 'deathCount',
   'ventilatorCount', 'cLineCount', 'foleyCount', 'mdrCount', 'ivHlCount',
   'piHomeCount', 'hapBundleCount', 'bradenUnder12Count', 'notes',
+  'highFlowCount', 'cannulaCount', // เพิ่มภายหลัง (O, P)
 ];
 const DAILY_HEAD = [
   'วันที่', 'รับใหม่', 'ผู้ป่วยในวอร์ด', 'Refer', 'เสียชีวิต',
   'Ventilator', 'C-Line', 'Foley', 'MDR', 'IV/HL',
   'PI_Home', 'HAP_Bundle', 'Braden < 12', 'หมายเหตุ',
+  'High flow', 'Cannula',
 ];
 
 const LOG_COLS = ['timestamp', 'event', 'bedNumber', 'caseCode', 'acuity', 'admittedAt', 'note'];
@@ -317,6 +323,27 @@ function authorize() {
   photoFolder_();
 }
 
+/** ชีตเดิมที่สร้างก่อนมีคอลัมน์ High flow / Cannula → เพิ่มหัวคอลัมน์ + ช่องติ๊กต่อท้ายให้อัตโนมัติ */
+function addNewColumns_(ss) {
+  const beds = ss.getSheetByName(TAB.beds);
+  if (beds && beds.getRange(1, BED_HEAD.length).getValue() === '') {
+    sheet_(TAB.beds, BED_HEAD);
+    const n = Math.max(beds.getLastRow() - 1, 0);
+    if (n) {
+      const range = beds.getRange(2, BED_EXTRA_BOOL_FROM, n, BED_EXTRA_BOOL_COUNT);
+      range.setDataValidation(SpreadsheetApp.newDataValidation().requireCheckbox().build());
+      range.setValues(range.getValues().map(function (r) {
+        return r.map(function (v) { return v === true; });
+      }));
+    }
+  }
+  const daily = ss.getSheetByName(TAB.daily);
+  if (daily && daily.getRange(1, DAILY_HEAD.length).getValue() === '') {
+    sheet_(TAB.daily, DAILY_HEAD);
+    daily.getRange('O2:P').setNumberFormat('0');
+  }
+}
+
 function ensureSetup_(force) {
   const ss = SpreadsheetApp.getActive();
   const existed = {
@@ -334,6 +361,7 @@ function ensureSetup_(force) {
     shifts: !!ss.getSheetByName(TAB.shifts),
   };
   const all = Object.keys(existed).every(function (k) { return existed[k]; });
+  if (all) addNewColumns_(ss);
   if (!force && all) return;
 
   const beds = sheet_(TAB.beds, BED_HEAD);
@@ -358,7 +386,8 @@ function ensureSetup_(force) {
       r[0] = b;
       r[1] = STATUS_TH.available;
       for (let i = 0; i < BED_BOOL_COUNT; i++) r[BED_BOOL_FROM - 1 + i] = false;
-      r[BED_COLS.length - 1] = now;
+      for (let i = 0; i < BED_EXTRA_BOOL_COUNT; i++) r[BED_EXTRA_BOOL_FROM - 1 + i] = false;
+      r[BED_COLS.indexOf('updatedAt')] = now;
       return r;
     });
     beds.getRange(2, 1, rows.length, BED_COLS.length).setValues(rows);
@@ -367,6 +396,8 @@ function ensureSetup_(force) {
   const maxRows = 20;
   // ใช้ data validation แบบ checkbox (insertCheckboxes() จะรีเซ็ตค่าเดิมเป็น false)
   beds.getRange(2, BED_BOOL_FROM, maxRows, BED_BOOL_COUNT).setDataValidation(
+    SpreadsheetApp.newDataValidation().requireCheckbox().build());
+  beds.getRange(2, BED_EXTRA_BOOL_FROM, maxRows, BED_EXTRA_BOOL_COUNT).setDataValidation(
     SpreadsheetApp.newDataValidation().requireCheckbox().build());
   beds.getRange(2, 2, maxRows, 1).setDataValidation(
     SpreadsheetApp.newDataValidation().requireValueInList(
@@ -384,6 +415,7 @@ function ensureSetup_(force) {
 
   daily.getRange('A2:A').setNumberFormat('yyyy-mm-dd');
   daily.getRange('B2:M').setNumberFormat('0');
+  daily.getRange('O2:P').setNumberFormat('0');
   daily.setColumnWidth(14, 240);
 
   log.getRange('A2:A').setNumberFormat('yyyy-mm-dd hh:mm');

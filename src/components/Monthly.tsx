@@ -1,15 +1,15 @@
-import { Activity, Download, Printer, Ambulance, ArrowUpRight, BedDouble, ChevronRight, Clock, HeartCrack, Pencil, Repeat, Timer, UserPlus, Wind } from 'lucide-react';
+import { Activity, Download, Printer, Ambulance, ArrowUpRight, BedDouble, ChevronRight, Clock, HeartCrack, Pencil, Plus, Repeat, Timer, UserPlus, Wind } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
-import { EVENT_META, INDICATORS } from '../lib/constants';
+import { ACUITIES, DEVICES, EVENT_META, INDICATORS } from '../lib/constants';
 import { fmtDateLong, fmtDateShort, fmtDateTime, fmtDayMonth, fmtMonth, parseLocalDateTime, toLocalDateTime } from '../lib/date';
-import { availableMonths, editCase, logTime, monthlySummary } from '../lib/logic';
+import { addPastCase, availableMonths, editCase, logTime, monthlySummary, stayDays } from '../lib/logic';
 import { sheetLink } from '../lib/sheetApi';
 import { fmtStat, STAT_DEFS, statsFor } from '../lib/stats';
 import { useStore } from '../lib/store';
-import type { IcuData, LogEntry } from '../types';
+import type { Acuity, DeviceKey, IcuData, LogEntry, OutEvent } from '../types';
 import { admitAcuitySlices, dischargeSlices, sumSlices } from '../lib/breakdowns';
 import { CHART_TYPES, DonutChart, SeriesChart, type ChartType } from './charts';
-import { Button, Dot, Empty, Modal, PageHero, Segmented } from './ui';
+import { Button, cx, Dot, Empty, Modal, PageHero, Segmented, Switch } from './ui';
 
 type Filter = 'all' | 'in' | 'out';
 
@@ -54,6 +54,7 @@ export function Monthly({
 }) {
   const { data, meta, isStaff } = useStore();
   const [editing, setEditing] = useState<LogEntry | null>(null);
+  const [adding, setAdding] = useState(false);
   const months = useMemo(() => availableMonths(data), [data]);
   const [ym, setYm] = useState(months[0]);
   const [filter, setFilter] = useState<Filter>('all');
@@ -217,6 +218,12 @@ export function Monthly({
               ]}
               label="ตัวกรองทะเบียน"
             />
+            {isStaff && (
+              <Button size="sm" variant="secondary" onClick={() => setAdding(true)}>
+                <Plus className="size-4" strokeWidth={2} />
+                เพิ่มเคสย้อนหลัง
+              </Button>
+            )}
             {meta?.spreadsheetUrl && (
               <a className="link inline-flex items-center gap-0.5 text-[14px]" href={sheetLink(meta, 'log') ?? '#'} target="_blank" rel="noreferrer">
                 แท็บ Log <ArrowUpRight className="size-3.5" />
@@ -286,6 +293,7 @@ export function Monthly({
         )}
       </section>
       <EditCaseDialog entry={editing} onClose={() => setEditing(null)} />
+      <AddPastCaseDialog open={adding} onClose={() => setAdding(false)} />
     </div>
   );
 }
@@ -362,6 +370,177 @@ function EditCaseDialog({ entry, onClose }: { entry: LogEntry | null; onClose: (
           {unsynced
             ? 'รายการนี้ยังไม่ได้บันทึกลงชีต รอสักครู่แล้วลองใหม่'
             : 'แก้ทุกแถวของเคสนี้ในแท็บ Log และย้ายยอดรับใหม่ / Refer / เสียชีวิตในบันทึกรายวันไปวันที่ถูกต้องให้อัตโนมัติ'}
+        </p>
+      </div>
+    </Modal>
+  );
+}
+
+const OUT_TYPES: { value: OutEvent; label: string }[] = [
+  { value: 'home', label: 'กลับบ้าน' },
+  { value: 'ward', label: 'ย้ายวอร์ด' },
+  { value: 'refer', label: 'Refer' },
+  { value: 'expired', label: 'เสียชีวิต' },
+];
+
+/** เคสที่ลืมกดทั้งรับเข้าและจำหน่าย (ผู้ป่วยออกไปแล้ว) → เพิ่มลงทะเบียน + ยอดรายวันย้อนหลัง */
+function AddPastCaseDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const { data, commit } = useStore();
+  const [bedNo, setBedNo] = useState('');
+  const [code, setCode] = useState('');
+  const [codeTouched, setCodeTouched] = useState(false);
+  const [acuity, setAcuity] = useState<Acuity | ''>('');
+  const [inAt, setInAt] = useState('');
+  const [outAt, setOutAt] = useState('');
+  const [event, setEvent] = useState<OutEvent>('home');
+  const [note, setNote] = useState('');
+  const [devices, setDevices] = useState<Partial<Record<DeviceKey, boolean>>>({});
+  const [backfill, setBackfill] = useState(true);
+
+  useEffect(() => {
+    if (!open) return;
+    setBedNo(data.beds[0]?.bedNumber ?? '');
+    setCode('');
+    setCodeTouched(false);
+    setAcuity('');
+    setInAt('');
+    setOutAt('');
+    setEvent('home');
+    setNote('');
+    setDevices({});
+    setBackfill(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  // รหัสเคสอัตโนมัติจากวันที่รับเข้า + ลำดับเตียง (แก้เองได้)
+  useEffect(() => {
+    if (codeTouched || !inAt) return;
+    const n = data.beds.findIndex((b) => b.bedNumber === bedNo) + 1;
+    setCode(`CASE-${inAt.slice(2, 4)}${inAt.slice(5, 7)}${inAt.slice(8, 10)}-${String(n || 1).padStart(2, '0')}`);
+  }, [inAt, bedNo, codeTouched, data.beds]);
+
+  const now = toLocalDateTime();
+  const error = !inAt || !outAt
+    ? 'กรุณาระบุวันเวลารับเข้าและจำหน่าย'
+    : outAt > now
+      ? 'เวลาจำหน่ายต้องไม่เกินเวลาปัจจุบัน'
+      : outAt <= inAt
+        ? 'เวลาจำหน่ายต้องหลังเวลารับเข้า'
+        : !code.trim()
+          ? 'กรุณาใส่รหัสเคส'
+          : '';
+  const days = !error ? stayDays(inAt, outAt) : [];
+  const duplicate = !!code.trim() && data.logs.some((l) => l.caseCode === code.trim() && logTime(l.admittedAt) === inAt);
+
+  const save = () => {
+    if (error || duplicate) return;
+    void commit(
+      (d) => addPastCase(d, { bedNumber: bedNo, caseCode: code, acuity, admittedAt: inAt, outAt, event, note, devices, backfill }),
+      `เพิ่มเคส ${code.trim()} ย้อนหลังแล้ว`,
+    );
+    onClose();
+  };
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="เพิ่มเคสย้อนหลัง"
+      subtitle="สำหรับเคสที่ลืมกดรับและผู้ป่วยออกจาก ICU ไปแล้ว · ถ้าผู้ป่วยยังอยู่ ให้กดรับที่ผังเตียงแล้วใส่เวลารับเข้าย้อนหลังแทน"
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose}>
+            ยกเลิก
+          </Button>
+          <Button variant="primary" onClick={save} disabled={!!error || duplicate}>
+            เพิ่มลงทะเบียน
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        <div className="grid gap-3 sm:grid-cols-3">
+          <label className="block">
+            <span className="mb-1.5 block text-[12px] text-ink-2">เตียง</span>
+            <select className="field" value={bedNo} onChange={(e) => setBedNo(e.target.value)}>
+              {data.beds.map((b) => (
+                <option key={b.bedNumber}>{b.bedNumber}</option>
+              ))}
+            </select>
+          </label>
+          <label className="block">
+            <span className="mb-1.5 block text-[12px] text-ink-2">รหัสเคส</span>
+            <input
+              className="field"
+              value={code}
+              placeholder="เลือกเวลารับเข้าก่อน"
+              onChange={(e) => {
+                setCode(e.target.value);
+                setCodeTouched(true);
+              }}
+            />
+          </label>
+          <label className="block">
+            <span className="mb-1.5 block text-[12px] text-ink-2">ระดับความรุนแรงเมื่อรับเข้า</span>
+            <select className="field" value={acuity} onChange={(e) => setAcuity(e.target.value as Acuity | '')}>
+              <option value="">ไม่ระบุ</option>
+              {ACUITIES.map((a) => (
+                <option key={a}>{a}</option>
+              ))}
+            </select>
+          </label>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className="block">
+            <span className="mb-1.5 block text-[12px] text-ink-2">วันเวลาที่รับเข้า</span>
+            <input type="datetime-local" className="field" value={inAt} max={outAt || now} onChange={(e) => setInAt(e.target.value)} />
+          </label>
+          <label className="block">
+            <span className="mb-1.5 block text-[12px] text-ink-2">วันเวลาที่จำหน่าย</span>
+            <input type="datetime-local" className="field" value={outAt} min={inAt || undefined} max={now} onChange={(e) => setOutAt(e.target.value)} />
+          </label>
+        </div>
+        <Segmented options={OUT_TYPES} value={event} onChange={setEvent} label="ประเภทการจำหน่าย" />
+        <label className="block">
+          <span className="mb-1.5 block text-[12px] text-ink-2">หมายเหตุ / ปลายทาง</span>
+          <textarea
+            className="field min-h-20"
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            placeholder={event === 'refer' ? 'เช่น รพ.ปลายทาง: รพ.ศูนย์นนทบุรี · ตึก/หอผู้ป่วย: ICU อายุรกรรม' : 'ไม่ต้องใส่ชื่อหรือ HN ผู้ป่วย'}
+          />
+        </label>
+        <div>
+          <p className="mb-2 text-[12px] text-ink-2">อุปกรณ์ที่ใช้ระหว่างนอน ICU (ใช้นับยอดอุปกรณ์รายวันย้อนหลัง)</p>
+          <div className="flex flex-wrap gap-1.5">
+            {DEVICES.map((d) => (
+              <button
+                key={d.key}
+                type="button"
+                aria-pressed={!!devices[d.key]}
+                onClick={() => setDevices((x) => ({ ...x, [d.key]: !x[d.key] }))}
+                className={cx(
+                  'h-8 rounded-full px-3 text-[12px] font-medium transition-colors',
+                  devices[d.key] ? 'btn-ink' : 'btn-glass text-ink-2',
+                )}
+              >
+                {d.label}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="well px-4">
+          <Switch
+            label={days.length ? `เพิ่มยอด “ผู้ป่วยในวอร์ด” และอุปกรณ์ ${days.length} วัน` : 'เพิ่มยอด “ผู้ป่วยในวอร์ด” และอุปกรณ์ย้อนหลัง'}
+            hint="ปิดถ้าเคยนับผู้ป่วยรายนี้ในบันทึกรายวันไว้แล้ว (เช่น กรอกตัวชี้วัดรายวันเอง)"
+            checked={backfill}
+            onChange={setBackfill}
+          />
+        </div>
+        <p className={error || duplicate ? 'text-[13px] text-critical' : 'text-[13px] text-ink-3'}>
+          {duplicate
+            ? 'มีเคสนี้ในทะเบียนแล้ว (รหัสเคสและเวลารับเข้าเดียวกัน)'
+            : error || 'ระบบจะเพิ่มแถว “รับเข้า” และ “จำหน่าย” ในแท็บ Log และนับยอดรับใหม่ / Refer / เสียชีวิตในวันที่ถูกต้อง'}
         </p>
       </div>
     </Modal>

@@ -26,6 +26,8 @@ const SERIES: Record<IndicatorGroup, SeriesDef[]> = {
   ],
   device: [
     { key: 'ventilatorCount', label: 'Ventilator', kind: 'line' },
+    { key: 'highFlowCount', label: 'High flow', kind: 'line' },
+    { key: 'cannulaCount', label: 'Cannula', kind: 'line' },
     { key: 'cLineCount', label: 'C-Line', kind: 'line' },
     { key: 'foleyCount', label: 'Foley', kind: 'line' },
     { key: 'ivHlCount', label: 'IV/HL', kind: 'line' },
@@ -119,7 +121,7 @@ export function Indicators({
     <div className="space-y-14 sm:space-y-16">
       {/* Header */}
       <PageHero
-        eyebrow="12 ตัวชี้วัดรายวัน"
+        eyebrow="14 ตัวชี้วัดรายวัน"
         tone="#2a78d6"
         title={fmtDateLong(date)}
         subtitle={
@@ -172,7 +174,7 @@ export function Indicators({
         }
       />
 
-      {/* 12 indicators */}
+      {/* 14 indicators */}
       <section>
         <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
           <h2 className="display text-[24px] sm:text-[28px]">{editing ? 'แก้ไขตัวเลข' : 'สรุปตัวชี้วัด'}</h2>

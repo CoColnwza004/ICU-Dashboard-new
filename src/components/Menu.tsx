@@ -134,7 +134,7 @@ export const MENU: Record<string, MenuItem> = {
       return n ? `${n} ฟอร์ม` : null;
     },
   },
-  indicators: { view: 'indicators', title: '12 ตัวชี้วัดรายวัน', desc: 'ยอดผู้ป่วยและอุปกรณ์รายวัน', icon: Activity, tone: '#2a78d6' },
+  indicators: { view: 'indicators', title: '14 ตัวชี้วัดรายวัน', desc: 'ยอดผู้ป่วยและอุปกรณ์รายวัน', icon: Activity, tone: '#2a78d6' },
   stats: { view: 'stats', title: 'สถิติเตียง', desc: 'ADC · ALOS · BOR · BTR · TOI', icon: Gauge, tone: '#008300' },
   monthly: { view: 'monthly', title: 'สรุปรายเดือน', desc: 'รายงานประจำเดือนและ PDF', icon: CalendarDays, tone: '#6250d6' },
   wall: { view: 'wall', title: 'จอแสดงผล', desc: 'โหมดเต็มจอสำหรับทีวี / แท็บเล็ต', icon: Maximize, tone: '#5f5f66' },

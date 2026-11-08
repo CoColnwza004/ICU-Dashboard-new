@@ -392,7 +392,7 @@ export function PrintReport({ job, mode = 'print' }: { job: PrintJob; mode?: 'pr
           </section>
         )}
         <section className="mb-6">
-          <h2 className="mb-2 text-[13px] font-semibold">12 ตัวชี้วัดรายวัน</h2>
+          <h2 className="mb-2 text-[13px] font-semibold">14 ตัวชี้วัดรายวัน</h2>
           <table className="w-full">
             <thead>
               <tr>
