@@ -2,7 +2,7 @@ import { Activity, Download, Printer, Ambulance, ArrowUpRight, BedDouble, Chevro
 import { useEffect, useMemo, useState } from 'react';
 import { ACUITIES, DEVICES, EVENT_META, INDICATORS } from '../lib/constants';
 import { fmtDateLong, fmtDateShort, fmtDateTime, fmtDayMonth, fmtMonth, parseLocalDateTime, toLocalDateTime } from '../lib/date';
-import { addPastCase, availableMonths, backfillInfo, caseLogs, deleteCase, editCase, logTime, monthlySummary, stayDays } from '../lib/logic';
+import { addPastCase, availableMonths, backfillInfo, cancelAdmission, caseLogs, deleteCase, editCase, logTime, monthlySummary, stayDays } from '../lib/logic';
 import { sheetLink } from '../lib/sheetApi';
 import { fmtStat, STAT_DEFS, statsFor } from '../lib/stats';
 import { useStore } from '../lib/store';
@@ -63,6 +63,12 @@ export function Monthly({
   const st = useMemo(() => statsFor(data, ym), [data, ym]);
 
   const logs = s.logs.filter((l) => filter === 'all' || (filter === 'in' ? l.event === 'admit' : EVENT_META[l.event].out));
+  /** แตะแถวไหนของเคสก็ได้ → เปิดเคสนั้น (ใช้แถวจำหน่ายถ้ามี) */
+  const openCase = (l: LogEntry) => {
+    if (EVENT_META[l.event].out) return setEditing(l);
+    const out = caseLogs(data.logs, l).find((x) => EVENT_META[x.event].out);
+    setEditing(out ?? l);
+  };
 
   const figures = [
     { label: 'รับใหม่', value: s.admissions, unit: 'ราย', Icon: UserPlus },
@@ -245,7 +251,11 @@ export function Monthly({
                   <th className="px-3 py-2.5 font-medium">ระดับ</th>
                   <th className="px-3 py-2.5 text-right font-medium">นอน (วัน)</th>
                   <th className="py-2.5 pr-6 pl-3 font-medium sm:pr-8">หมายเหตุ</th>
-                  {isStaff && <th className="py-2.5 pr-6 font-medium sm:pr-8"><span className="sr-only">แก้ไข</span></th>}
+                  {isStaff && (
+                    <th className="sticky right-0 bg-surface py-2.5 pr-4 pl-2 font-medium sm:pr-6">
+                      <span className="sr-only">แก้ไข / ลบ</span>
+                    </th>
+                  )}
                 </tr>
               </thead>
               <tbody>
@@ -254,7 +264,11 @@ export function Monthly({
                   const b = parseLocalDateTime(l.timestamp);
                   const los = EVENT_META[l.event].out && a && b ? Math.max(0, (b.getTime() - a.getTime()) / 86_400_000) : null;
                   return (
-                    <tr key={`${l.row ?? idx}-${l.timestamp}`} className="border-b border-line transition-colors last:border-0 hover:bg-fill-soft">
+                    <tr
+                      key={`${l.row ?? idx}-${l.timestamp}`}
+                      onClick={isStaff ? () => openCase(l) : undefined}
+                      className={cx('group border-b border-line transition-colors last:border-0 hover:bg-fill-soft', isStaff && 'cursor-pointer')}
+                    >
                       <td className="py-3 pr-3 pl-6 whitespace-nowrap text-ink-2 sm:pl-8">{fmtDateTime(l.timestamp)}</td>
                       <td className="px-3 py-3 whitespace-nowrap">
                         <span className="inline-flex items-center gap-1.5">
@@ -270,18 +284,19 @@ export function Monthly({
                         <span className="line-clamp-3">{l.note || '—'}</span>
                       </td>
                       {isStaff && (
-                        <td className="py-3 pr-6 sm:pr-8">
-                          {EVENT_META[l.event].out && (
-                            <button
-                              type="button"
-                              onClick={() => setEditing(l)}
-                              aria-label={`แก้ไขเคส ${l.caseCode || l.bedNumber} ${fmtDateTime(l.timestamp)}`}
-                              title="แก้ไขเวลา / หมายเหตุ"
-                              className="inline-flex size-8 items-center justify-center rounded-full bg-fill-soft text-ink-2 transition-colors hover:bg-accent/15 hover:text-accent"
-                            >
-                              <Pencil className="size-3.5" strokeWidth={1.9} />
-                            </button>
-                          )}
+                        <td className="sticky right-0 bg-surface py-3 pr-4 pl-2 transition-colors group-hover:bg-raised sm:pr-6">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              openCase(l);
+                            }}
+                            aria-label={`แก้ไขเคส ${l.caseCode || l.bedNumber} ${fmtDateTime(l.timestamp)}`}
+                            title="แก้ไข / ลบเคส"
+                            className="inline-flex size-8 items-center justify-center rounded-full bg-fill-soft text-ink-2 transition-colors hover:bg-accent/15 hover:text-accent"
+                          >
+                            <Pencil className="size-3.5" strokeWidth={1.9} />
+                          </button>
                         </td>
                       )}
                     </tr>
@@ -317,10 +332,27 @@ function EditCaseDialog({ entry, onClose }: { entry: LogEntry | null; onClose: (
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [entry]);
   useEffect(() => setReverseCensus(info.counted), [info.counted]);
-  const stay = entry ? stayDays(logTime(entry.admittedAt), logTime(entry.timestamp)) : [];
+  // ยังไม่จำหน่าย = ผู้ป่วยยังอยู่ในเตียง (ลบได้ แต่แก้เวลาที่ผังเตียง)
+  const inBed = !!entry && !EVENT_META[entry.event].out;
+  const bedNow = entry
+    ? data.beds.find(
+        (b) =>
+          b.status === 'occupied' &&
+          b.caseCode === entry.caseCode &&
+          logTime(b.admittedAt) === logTime(entry.admittedAt) &&
+          related.some((l) => l.bedNumber === b.bedNumber),
+      )
+    : undefined;
+  // แถวรับเข้าที่ค้าง (ไม่มีจำหน่าย และไม่มีผู้ป่วยในเตียงแล้ว) → ไม่รู้ช่วงวันที่นอน จึงไม่หักยอดผู้ป่วยในวอร์ด
+  const stay = !entry ? [] : inBed ? (bedNow ? stayDays(logTime(entry.admittedAt), null) : []) : stayDays(logTime(entry.admittedAt), logTime(entry.timestamp));
   const remove = () => {
     if (!entry) return;
-    void commit((d) => deleteCase(d, entry, { reverseCensus }), `ลบเคส ${entry.caseCode || entry.bedNumber} แล้ว`);
+    if (inBed && bedNow) {
+      // ผู้ป่วยยังอยู่ในเตียง → เตียงกลับเป็นว่าง
+      void commit((d) => cancelAdmission(d, bedNow.bedNumber, { reverseCensus }), `ลบเคส ${entry.caseCode || entry.bedNumber} · เตียง ${bedNow.bedNumber} ว่างแล้ว`);
+    } else {
+      void commit((d) => deleteCase(d, entry, { reverseCensus: reverseCensus && stay.length > 0 }), `ลบเคส ${entry.caseCode || entry.bedNumber} แล้ว`);
+    }
     onClose();
   };
 
@@ -348,7 +380,7 @@ function EditCaseDialog({ entry, onClose }: { entry: LogEntry | null; onClose: (
     <Modal
       open={!!entry}
       onClose={onClose}
-      title={confirmDelete ? 'ลบเคสนี้ออกจากทะเบียน' : 'แก้ไขเคสย้อนหลัง'}
+      title={confirmDelete ? 'ลบเคสนี้ออกจากทะเบียน' : inBed ? 'เคสที่ยังอยู่ในเตียง' : 'แก้ไขเคสย้อนหลัง'}
       subtitle={entry ? `${entry.caseCode || 'ไม่ระบุรหัสเคส'} · เตียง ${entry.bedNumber} · ${EVENT_META[entry.event].label}` : undefined}
       footer={
         confirmDelete ? (
@@ -370,9 +402,11 @@ function EditCaseDialog({ entry, onClose }: { entry: LogEntry | null; onClose: (
             <Button variant="ghost" onClick={onClose}>
               ยกเลิก
             </Button>
-            <Button variant="primary" onClick={save} disabled={!!error || !changed || unsynced}>
-              บันทึก
-            </Button>
+            {!inBed && (
+              <Button variant="primary" onClick={save} disabled={!!error || !changed || unsynced}>
+                บันทึก
+              </Button>
+            )}
           </>
         )
       }
@@ -380,8 +414,9 @@ function EditCaseDialog({ entry, onClose }: { entry: LogEntry | null; onClose: (
       {confirmDelete && entry ? (
         <div className="space-y-4">
           <p className="text-[15px] text-ink-2">
-            ลบ {related.length} แถวของเคสนี้ออกจากแท็บ Log (รับเข้า {fmtDateTime(entry.admittedAt)} → {EVENT_META[entry.event].label}{' '}
-            {fmtDateTime(entry.timestamp)}) และหักยอดคืนในบันทึกรายวัน:
+            ลบ {related.length} แถวของเคสนี้ออกจากแท็บ Log (รับเข้า {fmtDateTime(entry.admittedAt)}
+            {inBed ? '' : ` → ${EVENT_META[entry.event].label} ${fmtDateTime(entry.timestamp)}`}) และหักยอดคืนในบันทึกรายวัน
+            {inBed && bedNow ? ` · เตียง ${bedNow.bedNumber} จะกลับเป็น “ว่าง”` : ''}:
           </p>
           <ul className="well space-y-1 px-4 py-3 text-[14px] text-ink-2">
             {related.some((l) => l.event === 'admit') && <li>· รับใหม่ −1 ในวันที่ {fmtDateTime(entry.admittedAt).split(' ').slice(0, 2).join(' ')}</li>}
@@ -391,6 +426,7 @@ function EditCaseDialog({ entry, onClose }: { entry: LogEntry | null; onClose: (
               </li>
             )}
           </ul>
+          {stay.length > 0 && (
           <div className="well px-4">
             <Switch
               label={`หักยอด “ผู้ป่วยในวอร์ด” ${stay.length} วันด้วย`}
@@ -403,7 +439,23 @@ function EditCaseDialog({ entry, onClose }: { entry: LogEntry | null; onClose: (
               onChange={setReverseCensus}
             />
           </div>
+          )}
           <p className="text-[13px] text-critical">ลบแล้วกู้คืนไม่ได้</p>
+        </div>
+      ) : inBed && entry ? (
+        <div className="space-y-3 text-[15px] text-ink-2">
+          <p>
+            {bedNow ? (
+              <>
+                ผู้ป่วยยังอยู่ใน<span className="font-medium text-ink">เตียง {bedNow.bedNumber}</span> · รับเข้า {fmtDateTime(entry.admittedAt)}
+              </>
+            ) : (
+              <>ไม่พบผู้ป่วยรายนี้ในเตียงแล้ว แต่ทะเบียนยังไม่มีรายการจำหน่าย</>
+            )}
+          </p>
+          <p className="text-[13px] text-ink-3">
+            แก้เวลารับเข้าหรืออุปกรณ์ได้ที่ผังเตียง (แดชบอร์ด › ภาพรวม › แตะเตียง) · ถ้ารับผิดหรือบันทึกซ้ำ กด “ลบเคส”
+          </p>
         </div>
       ) : (
       <div className="space-y-4">

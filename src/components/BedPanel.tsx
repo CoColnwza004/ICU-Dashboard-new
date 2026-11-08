@@ -1,10 +1,14 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { ArrowLeftRight, Check } from 'lucide-react';
+import { ArrowLeftRight, Check, Trash2 } from 'lucide-react';
 import type { Acuity, Bed, Gender, OutEvent } from '../types';
 import { ACUITIES, ACUITY_META, AGE_GROUPS, DEVICES } from '../lib/constants';
 import { fmtDateTime, parseLocalDateTime, toLocalDateTime } from '../lib/date';
 import {
+  admitLogFor,
   admitPatient,
+  backfillInfo,
+  cancelAdmission,
+  caseLogs,
   composeOutNote,
   dischargePatient,
   emptyPatient,
@@ -20,7 +24,7 @@ import { useStore } from '../lib/store';
 import { Button, cx, Dot, Modal, Segmented, Switch } from './ui';
 
 type Mode = 'admit' | 'edit';
-type Pane = 'form' | 'out' | 'move';
+type Pane = 'form' | 'out' | 'move' | 'cancel';
 
 const OUT_OPTIONS: { value: OutEvent; label: string }[] = [
   { value: 'home', label: 'กลับบ้าน' },
@@ -67,6 +71,7 @@ export function BedPanel({ bedNumber, onClose }: { bedNumber: string | null; onC
   const [out, setOut] = useState<OutDetail>({});
   const [outAt, setOutAt] = useState('');
   const [backfill, setBackfill] = useState(true);
+  const [reverseCensus, setReverseCensus] = useState(false);
   const setOutField = (k: keyof OutDetail, v: string) => setOut((o) => ({ ...o, [k]: v }));
 
   // รีเซ็ตฟอร์มเมื่อเปิดเตียงใหม่เท่านั้น (ไม่รีเซ็ตทุกครั้งที่ข้อมูลจากชีตรีเฟรช)
@@ -120,6 +125,21 @@ export function BedPanel({ bedNumber, onClose }: { bedNumber: string | null; onC
         : '';
   const hospitals = useMemo(() => pastDestinations(data.logs, 'hospital'), [data.logs]);
   const units = useMemo(() => pastDestinations(data.logs, 'unit'), [data.logs]);
+  // ลบเคส (รับผิด/บันทึกผิด) ขณะผู้ป่วยยังอยู่ในเตียง
+  const cancelAdmit = target ? admitLogFor(data, target) : undefined;
+  const cancelLogs = cancelAdmit ? caseLogs(data.logs, cancelAdmit) : [];
+  const cancelInfo = backfillInfo(cancelLogs);
+  const cancelDays = bed?.status === 'occupied' ? stayDays((bed.admittedAt || '').replace(' ', 'T').slice(0, 16), null).length : 0;
+  const cancelUnsynced = cancelLogs.some((l) => l.row === undefined);
+  const openCancel = () => {
+    setReverseCensus(cancelInfo.counted);
+    setPane('cancel');
+  };
+  const cancelCase = () => {
+    void commit((d) => cancelAdmission(d, target, { reverseCensus }), `ลบเคส ${bed?.caseCode || ''} · เตียง ${target} ว่างแล้ว`);
+    onClose();
+  };
+
   const openOut = () => {
     setOutAt(toLocalDateTime());
     setPane('out');
@@ -167,6 +187,10 @@ export function BedPanel({ bedNumber, onClose }: { bedNumber: string | null; onC
                   <ArrowLeftRight className="size-4" strokeWidth={1.8} />
                   ย้ายเตียง
                 </Button>
+                <Button variant="ghost" onClick={openCancel} aria-label="ลบเคส (รับผิด / บันทึกผิด)" title="ลบเคส (รับผิด / บันทึกผิด)">
+                  <Trash2 className="size-4 text-critical" strokeWidth={1.8} />
+                  <span className="text-critical">ลบเคส</span>
+                </Button>
               </div>
             )}
             <Button variant="ghost" onClick={onClose}>
@@ -179,7 +203,38 @@ export function BedPanel({ bedNumber, onClose }: { bedNumber: string | null; onC
         )
       }
     >
-      {pane === 'move' ? (
+      {pane === 'cancel' ? (
+        <div className="animate-rise space-y-5 pb-2">
+          <p className="text-[15px] text-ink-2">
+            ลบเคส <span className="font-medium text-ink">{bed?.caseCode || 'ไม่ระบุรหัสเคส'}</span> ออกจากเตียง {target} — ใช้เมื่อรับผิดเตียงหรือบันทึกผิด/ซ้ำ
+            <br />
+            <span className="text-[13px] text-ink-3">
+              เตียงจะกลับเป็น “ว่าง” · ลบ{cancelLogs.length ? ` ${cancelLogs.length} แถวของเคสนี้` : 'รายการของเคสนี้'}ในทะเบียน · รับใหม่ −1 ในวันที่รับเข้า ·
+              ถ้าผู้ป่วยออกจาก ICU จริง ให้ใช้ “จำหน่าย” แทน
+            </span>
+          </p>
+          {cancelDays > 0 && (
+            <div className="well px-4">
+              <Switch
+                label={`หักยอด “ผู้ป่วยในวอร์ด” ย้อนหลัง ${cancelDays} วันด้วย`}
+                hint={cancelInfo.counted ? 'เคสนี้รับย้อนหลังพร้อมนับยอดรายวันไว้ จึงเปิดให้แล้ว (รวมอุปกรณ์ที่นับไว้)' : 'เปิดเฉพาะเมื่อแน่ใจว่าเคยนับผู้ป่วยรายนี้ในบันทึกรายวันของวันก่อน ๆ'}
+                checked={reverseCensus}
+                onChange={setReverseCensus}
+              />
+            </div>
+          )}
+          <p className="text-[13px] text-critical">ลบแล้วกู้คืนไม่ได้</p>
+          <div className="flex flex-wrap justify-end gap-2">
+            <Button variant="ghost" onClick={() => setPane('form')}>
+              ย้อนกลับ
+            </Button>
+            <Button variant="danger" onClick={cancelCase} disabled={cancelUnsynced}>
+              <Trash2 className="size-4" strokeWidth={1.8} />
+              ยืนยันลบเคส
+            </Button>
+          </div>
+        </div>
+      ) : pane === 'move' ? (
         <div className="animate-rise space-y-5 pb-2">
           <p className="text-[15px] text-ink-2">
             ย้ายผู้ป่วย <span className="font-medium text-ink">{bed?.caseCode || 'ไม่ระบุรหัสเคส'}</span> จากเตียง {target} ไปที่

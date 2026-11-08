@@ -421,6 +421,9 @@ export const admitPatient = (data: IcuData, bedNumber: string, p: PatientInput, 
     if (opts.backfill) addCensus(delta, stayDays(admittedAt, null), Object.fromEntries(DEVICES.map((d) => [d.key, bed[d.key]])));
   }
   const past = applyDelta(today.daily, delta);
+  // จำไว้ในหมายเหตุว่านับยอดย้อนหลังแล้ว (ใช้หักคืนถ้าลบเคสภายหลัง)
+  const used = DEVICES.filter((d) => bed[d.key]).map((d) => d.label);
+  const mark = !sameDay && opts.backfill ? `${BACKFILL_MARK}${used.length ? ` (อุปกรณ์: ${used.join(', ')})` : ''}` : '';
   const entry: LogEntry = {
     timestamp: admittedAt,
     event: 'admit',
@@ -428,7 +431,7 @@ export const admitPatient = (data: IcuData, bedNumber: string, p: PatientInput, 
     caseCode: bed.caseCode,
     acuity: bed.acuity,
     admittedAt,
-    note: bed.clinicalGoals,
+    note: [bed.clinicalGoals, mark].filter(Boolean).join(' · '),
   };
   return {
     next: { ...data, beds, daily: past.daily, logs: [...data.logs, entry] },
@@ -444,8 +447,10 @@ export const retimeAdmission = (data: IcuData, bedNumber: string, oldAt: string,
   if (!bed || !from || !to || from === to) return { next: data, ops: [] };
   const ops: SheetOp[] = [];
   let admitFound = false;
+  const anchor = data.logs.find((l) => l.caseCode === bed.caseCode && logTime(l.admittedAt) === from && l.bedNumber === bedNumber);
+  const stay = anchor ? caseLogs(data.logs, anchor) : [];
   const logs = data.logs.map((l) => {
-    if (l.caseCode !== bed.caseCode || logTime(l.admittedAt) !== from) return l;
+    if (!stay.includes(l)) return l;
     const isAdmit = l.event === 'admit';
     if (isAdmit) admitFound = true;
     const upd = { ...l, admittedAt: to, timestamp: isAdmit ? to : l.timestamp };
@@ -465,7 +470,7 @@ export const retimeAdmission = (data: IcuData, bedNumber: string, oldAt: string,
 export const BACKFILL_MARK = 'บันทึกย้อนหลัง · นับยอดรายวันแล้ว';
 /** อ่านว่าเคสนี้เคยนับยอดรายวันย้อนหลังไว้ไหม และอุปกรณ์อะไร */
 export const backfillInfo = (logs: LogEntry[]) => {
-  const admit = logs.find((l) => l.event === 'admit' && l.note.startsWith(BACKFILL_MARK));
+  const admit = logs.find((l) => l.event === 'admit' && l.note.includes(BACKFILL_MARK));
   if (!admit) return { counted: false, devices: {} as Partial<Record<DeviceKey, boolean>> };
   const m = admit.note.match(/\(อุปกรณ์: ([^)]*)\)/);
   const names = m ? m[1].split(',').map((x) => x.trim()) : [];
@@ -500,6 +505,50 @@ export const deleteCase = (data: IcuData, out: LogEntry, opts: { reverseCensus: 
   return {
     next: { ...data, logs, daily: res.daily },
     ops: [...res.ops, ...(rows.length ? [{ type: 'deleteLog', rows } as SheetOp] : [])],
+  };
+};
+
+/** แถวรับเข้าของผู้ป่วยที่อยู่ในเตียงนี้ตอนนี้ (ถ้ามีในทะเบียน) */
+export const admitLogFor = (data: IcuData, bedNumber: string) => {
+  const bed = data.beds.find((b) => b.bedNumber === bedNumber);
+  if (!bed || bed.status !== 'occupied') return undefined;
+  const admits = [...data.logs]
+    .reverse()
+    .filter((l) => l.event === 'admit' && l.caseCode === bed.caseCode && logTime(l.admittedAt) === logTime(bed.admittedAt));
+  // รหัสเคสซ้ำหลายเตียง → เลือกแถวที่เส้นทางเตียงมาถึงเตียงนี้
+  return admits.find((a) => a.bedNumber === bedNumber || caseLogs(data.logs, a).some((l) => l.bedNumber === bedNumber)) ?? admits[0];
+};
+
+/**
+ * ลบเคสที่ยังอยู่ในเตียง (รับผิด/บันทึกผิด): เตียงกลับเป็น "ว่าง" · ลบแถวของเคสในทะเบียน · หักยอดรับใหม่คืน
+ * reverseCensus: หักยอดผู้ป่วยในวอร์ด (และอุปกรณ์ที่นับไว้) ของวันที่ผ่านมาที่เคยนับย้อนหลัง
+ */
+export const cancelAdmission = (data: IcuData, bedNumber: string, opts: { reverseCensus: boolean }): ActionResult => {
+  const prev = data.beds.find((b) => b.bedNumber === bedNumber);
+  if (!prev || prev.status !== 'occupied') return { next: data, ops: [] };
+  const admit = admitLogFor(data, bedNumber);
+  const related = admit ? caseLogs(data.logs, admit) : [];
+  const bed: Bed = { ...emptyBed(bedNumber), row: prev.row, status: 'available', updatedAt: toLocalDateTime() };
+  const beds = putBed(data.beds, bed);
+  const today = touchToday(data.daily, beds);
+  const delta: DailyDelta = new Map();
+  if (admit) addDelta(delta, logTime(admit.timestamp).slice(0, 10), 'admittedNew', -1);
+  if (opts.reverseCensus) {
+    const info = backfillInfo(related);
+    stayDays(logTime(prev.admittedAt), null).forEach((d) => {
+      addDelta(delta, d, 'totalInWard', -1);
+      DEVICES.forEach((dv) => info.devices[dv.key] && addDelta(delta, d, dv.dailyKey, -1));
+    });
+  }
+  const res = applyDelta(today.daily, delta);
+  const gone = related.filter((l) => l.row).map((l) => l.row!);
+  const logs = data.logs
+    .filter((l) => !related.includes(l))
+    .map((l) => (l.row ? { ...l, row: l.row - gone.filter((r) => r < l.row!).length } : l));
+  const rows = related.filter((l) => l.row).map((l) => ({ row: l.row!, caseCode: l.caseCode, bedNumber: l.bedNumber }));
+  return {
+    next: { ...data, beds, logs, daily: res.daily },
+    ops: [bedOp(bed), today.op, ...res.ops, ...(rows.length ? [{ type: 'deleteLog', rows } as SheetOp] : [])],
   };
 };
 
@@ -634,12 +683,26 @@ export const dischargePatient = (
 export const logTime = (t: string) => t.replace(' ', 'T').slice(0, 16);
 
 /** รายการทั้งหมดของเคสเดียวกัน (รหัสเคส + เวลารับเข้าเดียวกัน = การนอนครั้งเดียวกัน) */
-export const caseLogs = (logs: LogEntry[], out: LogEntry) =>
-  logs.filter(
-    (l) =>
-      l.caseCode === out.caseCode &&
-      (logTime(l.admittedAt) === logTime(out.admittedAt) || (l.event === 'admit' && logTime(l.timestamp) === logTime(out.admittedAt))),
-  );
+export const caseLogs = (logs: LogEntry[], one: LogEntry) => {
+  const sameStay = (l: LogEntry) =>
+    l.caseCode === one.caseCode &&
+    (logTime(l.admittedAt) === logTime(one.admittedAt) || (l.event === 'admit' && logTime(l.timestamp) === logTime(one.admittedAt)));
+  const candidates = logs.filter(sameStay);
+  // แยกตามเส้นทางเตียง (รับเข้าเตียงไหน → ย้ายไปไหน) กันกรณีรหัสเคสซ้ำกันหลายเตียง
+  const beds = new Set([one.bedNumber]);
+  const moveFrom = (l: LogEntry) => l.note.match(/ย้ายจาก\s*(\S+)\s*→\s*(\S+)/)?.[1];
+  for (let grew = true; grew; ) {
+    grew = false;
+    candidates.forEach((l) => {
+      if (l.event !== 'move') return;
+      const from = moveFrom(l);
+      if (!from) return;
+      if (beds.has(l.bedNumber) && !beds.has(from)) (beds.add(from), (grew = true));
+      if (beds.has(from) && !beds.has(l.bedNumber)) (beds.add(l.bedNumber), (grew = true));
+    });
+  }
+  return candidates.filter((l) => beds.has(l.bedNumber) || (l.event === 'move' && beds.has(moveFrom(l) ?? '')));
+};
 
 const OUT_COUNT: Partial<Record<LogEvent, DailyKey>> = { refer: 'referCount', ward: 'referCount', expired: 'deathCount' };
 
