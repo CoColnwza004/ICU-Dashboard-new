@@ -66,12 +66,14 @@ const DAILY_COLS = [
   'ventilatorCount', 'cLineCount', 'foleyCount', 'mdrCount', 'ivHlCount',
   'piHomeCount', 'hapBundleCount', 'bradenUnder12Count', 'notes',
   'highFlowCount', 'cannulaCount', // เพิ่มภายหลัง (O, P)
+  'wardCount', 'homeCount', 'carryCount', // แยกประเภทจำหน่าย (Q, R, S) — Refer (D) นับเฉพาะส่งต่อ
 ];
 const DAILY_HEAD = [
   'วันที่', 'รับใหม่', 'ผู้ป่วยในวอร์ด', 'Refer', 'เสียชีวิต',
   'Ventilator', 'C-Line', 'Foley', 'MDR', 'IV/HL',
   'PI_Home', 'HAP_Bundle', 'Braden < 12', 'หมายเหตุ',
   'High flow', 'Cannula',
+  'ย้ายวอร์ด', 'กลับบ้าน', 'ยกยอดเดือนถัดไป',
 ];
 
 const LOG_COLS = ['timestamp', 'event', 'bedNumber', 'caseCode', 'acuity', 'admittedAt', 'note'];
@@ -339,9 +341,49 @@ function addNewColumns_(ss) {
   }
   const daily = ss.getSheetByName(TAB.daily);
   if (daily && daily.getRange(1, DAILY_HEAD.length).getValue() === '') {
+    const splitNeeded = daily.getRange(1, DAILY_COLS.indexOf('wardCount') + 1).getValue() === '';
     sheet_(TAB.daily, DAILY_HEAD);
-    daily.getRange('O2:P').setNumberFormat('0');
+    daily.getRange('O2:S').setNumberFormat('0');
+    if (splitNeeded) splitDischarges_(ss, daily);
   }
+}
+
+/**
+ * ครั้งเดียวตอนเพิ่มคอลัมน์ ย้ายวอร์ด / กลับบ้าน / ยกยอด:
+ * เดิมช่อง Refer นับ "ย้ายวอร์ด" รวมไว้ด้วย → นับจากทะเบียน (Log) แล้วแยกออก
+ * Refer ใหม่ = Refer เดิม − ย้ายวอร์ด (ค่าที่เคยแก้มือในช่อง Refer ยังอยู่)
+ */
+function splitDischarges_(ss, daily) {
+  const log = ss.getSheetByName(TAB.log);
+  const tz = ss.getSpreadsheetTimeZone();
+  const toKey = {};
+  Object.keys(EVENT_TH).forEach(function (k) { toKey[EVENT_TH[k]] = k; toKey[k] = k; });
+  toKey['กลับบ้าน'] = 'home';
+  toKey['ส่งต่อ'] = 'refer';
+  toKey['ยกยอด'] = 'carry';
+  const count = {}; // date → { ward, home, carry }
+  (log ? readRows_(log, LOG_COLS, tz) : []).forEach(function (r) {
+    const ev = toKey[String(r.event).trim()] || toKey[String(r.event).trim().toLowerCase()];
+    if (ev !== 'ward' && ev !== 'home' && ev !== 'carry') return;
+    const day = String(r.timestamp).replace(' ', 'T').slice(0, 10);
+    if (!count[day]) count[day] = { ward: 0, home: 0, carry: 0 };
+    count[day][ev] += 1;
+  });
+  const n = daily.getLastRow() - 1;
+  if (n < 1) return;
+  const dates = daily.getRange(2, 1, n, 1).getValues();
+  const referCol = DAILY_COLS.indexOf('referCount') + 1;
+  const refer = daily.getRange(2, referCol, n, 1).getValues();
+  const extra = [];
+  dates.forEach(function (d, i) {
+    const key = d[0] instanceof Date ? Utilities.formatDate(d[0], tz, 'yyyy-MM-dd') : String(d[0]).slice(0, 10);
+    const c = count[key] || { ward: 0, home: 0, carry: 0 };
+    const r = Number(refer[i][0]) || 0;
+    refer[i][0] = d[0] === '' ? refer[i][0] : Math.max(0, r - c.ward);
+    extra.push(d[0] === '' ? ['', '', ''] : [c.ward, c.home, c.carry]);
+  });
+  daily.getRange(2, referCol, n, 1).setValues(refer);
+  daily.getRange(2, DAILY_COLS.indexOf('wardCount') + 1, n, 3).setValues(extra);
 }
 
 function ensureSetup_(force) {
@@ -415,7 +457,7 @@ function ensureSetup_(force) {
 
   daily.getRange('A2:A').setNumberFormat('yyyy-mm-dd');
   daily.getRange('B2:M').setNumberFormat('0');
-  daily.getRange('O2:P').setNumberFormat('0');
+  daily.getRange('O2:S').setNumberFormat('0');
   daily.setColumnWidth(14, 240);
 
   log.getRange('A2:A').setNumberFormat('yyyy-mm-dd hh:mm');

@@ -1,3 +1,4 @@
+import { INDICATORS } from '../lib/constants';
 import {
   Activity,
   BedDouble,
@@ -39,7 +40,7 @@ const ACTIONS: { title: string; items: Action[] }[] = [
     items: [
       { title: 'ประกาศข่าว', desc: 'ข่าวสาร ประกาศ กิจกรรม พร้อมรูปและไฟล์แนบ', icon: Megaphone, tone: '#eb6834', go: ['news', 'new'] },
       { title: 'รับผู้ป่วย / จัดการเตียง', desc: 'รับใหม่ ย้ายเตียง จำหน่าย ทำความสะอาด', icon: BedDouble, tone: '#2a78d6', go: ['overview', 'admit'] },
-      { title: 'บันทึก 14 ตัวชี้วัดรายวัน', desc: 'ยอดผู้ป่วยและอุปกรณ์ของวันนี้', icon: Activity, tone: '#2a78d6', go: ['indicators', 'entry'] },
+      { title: `บันทึก ${INDICATORS.length} ตัวชี้วัดรายวัน`, desc: 'ยอดผู้ป่วยและอุปกรณ์ของวันนี้', icon: Activity, tone: '#2a78d6', go: ['indicators', 'entry'] },
       { title: 'จัดตารางเวร', desc: 'ลงเวรรายเดือน', icon: CalendarClock, tone: '#1baf7a', go: ['roster', 'entry'] },
     ],
   },

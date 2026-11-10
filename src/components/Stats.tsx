@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { fmtMonth } from '../lib/date';
 import { availableMonths, saveStats } from '../lib/logic';
 import { sheetLink } from '../lib/sheetApi';
-import { autoStatsInput, computeStats, findStats, fmtStat, STAT_DEFS, type StatsInput } from '../lib/stats';
+import { autoStatsInput, computeStats, dischargeBreakdown, findStats, fmtStat, STAT_DEFS, type StatsInput } from '../lib/stats';
 import { useStore } from '../lib/store';
 import { Button, cx, Empty, PageHero } from './ui';
 import { Ring } from './viz';
@@ -12,7 +12,7 @@ const FIELDS: { key: keyof StatsInput; label: string; hint: string; icon: ReactN
   { key: 'beds', label: 'จำนวนเตียง', hint: 'เตียงที่เปิดให้บริการ', icon: <BedDouble className="size-4" strokeWidth={1.7} /> },
   { key: 'days', label: 'จำนวนวัน', hint: 'วันในช่วงที่คำนวณ', icon: <CalendarDays className="size-4" strokeWidth={1.7} /> },
   { key: 'patientDays', label: 'วันนอนรวม', hint: 'ผลรวม “ผู้ป่วยในวอร์ด” ทุกวัน', icon: <Hotel className="size-4" strokeWidth={1.7} /> },
-  { key: 'discharges', label: 'ผู้ป่วยจำหน่าย', hint: 'กลับบ้าน + ย้าย + Refer + เสียชีวิต', icon: <LogOut className="size-4" strokeWidth={1.7} /> },
+  { key: 'discharges', label: 'ผู้ป่วยจำหน่าย', hint: 'กลับบ้าน + ย้ายวอร์ด + Refer + เสียชีวิต + ยกยอดเดือนถัดไป', icon: <LogOut className="size-4" strokeWidth={1.7} /> },
 ];
 
 export function Stats({
@@ -33,6 +33,7 @@ export function Stats({
   const [ym, setYm] = useState(months[0]);
   const saved = findStats(data, ym);
   const auto = useMemo(() => autoStatsInput(data, ym), [data, ym]);
+  const parts = useMemo(() => dischargeBreakdown(data, ym), [data, ym]);
   const [draft, setDraft] = useState<StatsInput>(saved ?? auto);
   const [note, setNote] = useState(saved?.note ?? '');
   const [dirty, setDirty] = useState(false);
@@ -141,6 +142,7 @@ export function Stats({
                   className="num mt-1.5 w-full bg-transparent text-[28px] font-semibold text-ink focus:outline-none"
                 />
                 <span className="block text-[11px] text-ink-3">{f.hint}</span>
+                {f.key === 'discharges' && <DischargeParts parts={parts} />}
               </label>
             ))}
             <textarea
@@ -171,7 +173,7 @@ export function Stats({
             )}
           </div>}
           <p className="mt-4 text-[12px] leading-relaxed text-ink-3">
-            ค่าจากระบบ: วันนอนรวมจากแท็บ Daily, ผู้ป่วยจำหน่ายจาก Refer + เสียชีวิต (Daily) และจำหน่ายกลับบ้าน (Log) ·
+            ค่าจากระบบ: วันนอนรวมจากแท็บ Daily, ผู้ป่วยจำหน่าย = กลับบ้าน + ย้ายวอร์ด + Refer + เสียชีวิต + ยกยอดเดือนถัดไป (Daily) ·
             แก้ตัวเลขเองได้ก่อนบันทึก
           </p>
         </div>
@@ -224,7 +226,7 @@ export function Stats({
           <Empty title="ยังไม่มีสถิติที่บันทึก">กรอกข้อมูลด้านบนแล้วกด “บันทึกลงชีต”</Empty>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[820px] text-[13px]">
+            <table className="w-full min-w-[1040px] text-[13px]">
               <thead>
                 <tr className="border-y border-line text-left text-[11px] text-ink-3">
                   <th className="py-2.5 pr-3 pl-6 font-medium sm:pl-8">เดือน</th>
@@ -232,6 +234,11 @@ export function Stats({
                   <th className="px-2 py-2.5 text-right font-medium">วัน</th>
                   <th className="px-2 py-2.5 text-right font-medium">วันนอนรวม</th>
                   <th className="px-2 py-2.5 text-right font-medium">จำหน่าย</th>
+                  {PART_COLS.map((c) => (
+                    <th key={c.key} className="px-2 py-2.5 text-right font-medium whitespace-nowrap text-ink-3">
+                      {c.short}
+                    </th>
+                  ))}
                   {STAT_DEFS.map((d) => (
                     <th key={d.key} className="px-2 py-2.5 text-right font-medium">
                       {d.label}
@@ -244,6 +251,7 @@ export function Stats({
               <tbody>
                 {[...data.stats].reverse().map((r) => {
                   const v = computeStats(r);
+                  const p = dischargeBreakdown(data, r.month);
                   return (
                     <tr
                       key={r.month}
@@ -258,6 +266,11 @@ export function Stats({
                       <td className="num px-2 py-3 text-right">{r.days}</td>
                       <td className="num px-2 py-3 text-right">{r.patientDays}</td>
                       <td className="num px-2 py-3 text-right">{r.discharges}</td>
+                      {PART_COLS.map((c) => (
+                        <td key={c.key} className="num px-2 py-3 text-right text-ink-2">
+                          {p[c.key]}
+                        </td>
+                      ))}
                       {STAT_DEFS.map((d) => (
                         <td key={d.key} className="num px-2 py-3 text-right font-medium">
                           {fmtStat(v[d.key])}
@@ -286,5 +299,27 @@ export function Stats({
         )}
       </section>
     </div>
+  );
+}
+
+/** จำหน่ายแยกประเภท (จากแท็บ Daily) */
+const PART_COLS = [
+  { key: 'home', label: 'กลับบ้าน', short: 'กลับบ้าน' },
+  { key: 'ward', label: 'ย้ายวอร์ด', short: 'ย้ายวอร์ด' },
+  { key: 'refer', label: 'Refer', short: 'Refer' },
+  { key: 'expired', label: 'เสียชีวิต', short: 'เสียชีวิต' },
+  { key: 'carry', label: 'ยกยอดเดือนถัดไป', short: 'ยกยอด' },
+] as const;
+
+function DischargeParts({ parts }: { parts: ReturnType<typeof dischargeBreakdown> }) {
+  return (
+    <span className="mt-2.5 flex flex-wrap gap-1.5">
+      {PART_COLS.map((c) => (
+        <span key={c.key} className="inline-flex items-baseline gap-1.5 rounded-full bg-surface px-2.5 py-1 text-[12px] text-ink-2">
+          {c.label}
+          <span className="num text-[14px] font-semibold text-ink">{parts[c.key]}</span>
+        </span>
+      ))}
+    </span>
   );
 }

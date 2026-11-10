@@ -21,8 +21,11 @@ const SERIES: Record<IndicatorGroup, SeriesDef[]> = {
   flow: [
     { key: 'totalInWard', label: 'ผู้ป่วยในวอร์ด', kind: 'line' },
     { key: 'admittedNew', label: 'รับใหม่', kind: 'bar' },
+    { key: 'homeCount', label: 'กลับบ้าน', kind: 'bar' },
+    { key: 'wardCount', label: 'ย้ายวอร์ด', kind: 'bar' },
     { key: 'referCount', label: 'Refer', kind: 'bar' },
     { key: 'deathCount', label: 'เสียชีวิต', kind: 'bar' },
+    { key: 'carryCount', label: 'ยกยอด', kind: 'bar' },
   ],
   device: [
     { key: 'ventilatorCount', label: 'Ventilator', kind: 'line' },
@@ -121,7 +124,7 @@ export function Indicators({
     <div className="space-y-14 sm:space-y-16">
       {/* Header */}
       <PageHero
-        eyebrow="14 ตัวชี้วัดรายวัน"
+        eyebrow={`${INDICATORS.length} ตัวชี้วัดรายวัน`}
         tone="#2a78d6"
         title={fmtDateLong(date)}
         subtitle={

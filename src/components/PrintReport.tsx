@@ -1,7 +1,7 @@
 import { ACUITY_META, DEVICES, EVENT_META, HOSPITAL, INDICATORS, STATUS_META, UNIT } from '../lib/constants';
 import { fmtDateLong, fmtDateShort, fmtDateTime, fmtDayMonth, fmtMonth, shiftDate, todayKey } from '../lib/date';
 import { countsFromBeds, emptyDaily, findDaily, monthlySummary } from '../lib/logic';
-import { computeStats, fmtStat, STAT_DEFS, statsFor } from '../lib/stats';
+import { computeStats, fmtStat, STAT_DEFS, statsFor, dischargeBreakdown } from '../lib/stats';
 import { useStore } from '../lib/store';
 import { daysInMonth, isWeekend, parseCode, realName, rosterFor, SHIFTS, weekdayShort } from '../lib/roster';
 import { CodeChip } from './RosterPage';
@@ -138,6 +138,8 @@ export function PrintReport({ job, mode = 'print' }: { job: PrintJob; mode?: 'pr
             series={[
               { key: 'totalInWard', label: 'ผู้ป่วยในวอร์ด', kind: 'line' },
               { key: 'admittedNew', label: 'รับใหม่', kind: 'bar' },
+              { key: 'homeCount', label: 'กลับบ้าน', kind: 'bar' },
+              { key: 'wardCount', label: 'ย้ายวอร์ด', kind: 'bar' },
               { key: 'referCount', label: 'Refer', kind: 'bar' },
               { key: 'deathCount', label: 'เสียชีวิต', kind: 'bar' },
             ]}
@@ -149,7 +151,7 @@ export function PrintReport({ job, mode = 'print' }: { job: PrintJob; mode?: 'pr
             items={[
               { title: 'สถานะเตียงขณะพิมพ์', slices: bedStatusSlices(data.beds), unit: 'เตียง', center: 'เตียง' },
               { title: 'ความรุนแรงของผู้ป่วยขณะนี้', slices: bedAcuitySlices(data.beds), center: 'ผู้ป่วย' },
-              { title: 'เหตุการณ์วันนี้', slices: sumSlices([rec], ['admittedNew', 'referCount', 'deathCount']), center: 'ครั้ง' },
+              { title: 'เหตุการณ์วันนี้', slices: sumSlices([rec], ['admittedNew', 'homeCount', 'wardCount', 'referCount', 'deathCount', 'carryCount']), center: 'ครั้ง' },
             ]}
           />
         )}
@@ -192,11 +194,13 @@ export function PrintReport({ job, mode = 'print' }: { job: PrintJob; mode?: 'pr
   /** ADC · ALOS · BOR · BTR · TOI พร้อมสูตรและตัวเลขที่ใช้ */
   function StatsBlock({ ym }: { ym: string }) {
     const { input, values, saved, note } = statsFor(data, ym);
+    const p = dischargeBreakdown(data, ym);
     return (
       <section className="mb-6 break-inside-avoid">
         <h2 className="mb-2 text-[13px] font-semibold">สถิติการใช้เตียง (ADC · ALOS · BOR · BTR · TOI)</h2>
         <p className="mb-2 text-[10px] text-black/60">
-          จำนวนเตียง {input.beds} · จำนวนวัน {input.days} · วันนอนรวม {input.patientDays} · ผู้ป่วยจำหน่าย {input.discharges}
+          จำนวนเตียง {input.beds} · จำนวนวัน {input.days} · วันนอนรวม {input.patientDays} · ผู้ป่วยจำหน่าย {input.discharges} (กลับบ้าน{' '}
+          {p.home} · ย้ายวอร์ด {p.ward} · Refer {p.refer} · เสียชีวิต {p.expired} · ยกยอดเดือนถัดไป {p.carry})
           {saved ? ' · ข้อมูลจากแท็บ Stats' : ' · คำนวณจากข้อมูลในระบบ (ยังไม่บันทึกในแท็บ Stats)'}
         </p>
         <div className="mb-2 grid grid-cols-5 gap-px overflow-hidden rounded-lg border border-black/15 bg-black/15">
@@ -385,14 +389,16 @@ export function PrintReport({ job, mode = 'print' }: { job: PrintJob; mode?: 'pr
               series={[
                 { key: 'totalInWard', label: 'ผู้ป่วยในวอร์ด', kind: 'line' },
                 { key: 'admittedNew', label: 'รับใหม่', kind: 'bar' },
-                { key: 'referCount', label: 'Refer / ย้าย', kind: 'bar' },
+                { key: 'homeCount', label: 'กลับบ้าน', kind: 'bar' },
+                { key: 'wardCount', label: 'ย้ายวอร์ด', kind: 'bar' },
+                { key: 'referCount', label: 'Refer', kind: 'bar' },
                 { key: 'deathCount', label: 'เสียชีวิต', kind: 'bar' },
               ]}
             />
           </section>
         )}
         <section className="mb-6">
-          <h2 className="mb-2 text-[13px] font-semibold">14 ตัวชี้วัดรายวัน</h2>
+          <h2 className="mb-2 text-[13px] font-semibold">{INDICATORS.length} ตัวชี้วัดรายวัน</h2>
           <table className="w-full">
             <thead>
               <tr>

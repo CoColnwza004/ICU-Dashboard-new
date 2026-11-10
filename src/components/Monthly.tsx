@@ -1,4 +1,4 @@
-import { Activity, Download, Printer, Ambulance, ArrowUpRight, BedDouble, ChevronRight, Clock, HeartCrack, Pencil, Plus, Repeat, Trash2, Timer, UserPlus, Wind } from 'lucide-react';
+import { Activity, Download, Printer, Ambulance, ArrowUpRight, BedDouble, ChevronRight, ArrowRightLeft, Clock, Forward, HeartCrack, House, Pencil, Plus, Repeat, Trash2, Timer, UserPlus, Wind } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { ACUITIES, DEVICES, EVENT_META, INDICATORS } from '../lib/constants';
 import { fmtDateLong, fmtDateShort, fmtDateTime, fmtDayMonth, fmtMonth, parseLocalDateTime, toLocalDateTime } from '../lib/date';
@@ -72,8 +72,11 @@ export function Monthly({
 
   const figures = [
     { label: 'รับใหม่', value: s.admissions, unit: 'ราย', Icon: UserPlus },
-    { label: 'Refer / ย้ายวอร์ด', value: s.refers, unit: 'ราย', Icon: Ambulance },
+    { label: 'กลับบ้าน', value: s.homes, unit: 'ราย', Icon: House },
+    { label: 'ย้ายวอร์ด', value: s.wards, unit: 'ราย', Icon: ArrowRightLeft },
+    { label: 'Refer', value: s.refers, unit: 'ราย', Icon: Ambulance },
     { label: 'เสียชีวิต', value: s.deaths, unit: 'ราย', Icon: HeartCrack },
+    { label: 'ยกยอดเดือนถัดไป', value: s.carries, unit: 'ราย', Icon: Forward },
     { label: 'Ventilator utilization', value: s.ventilatorRate, unit: '%', Icon: Wind },
     { label: 'ADC · ผู้ป่วยเฉลี่ยต่อวัน', value: fmtStat(st.values.adc), unit: 'ราย/วัน', Icon: Activity },
     { label: 'ALOS · วันนอนเฉลี่ย', value: fmtStat(st.values.alos), unit: 'วัน', Icon: Clock },
@@ -162,7 +165,7 @@ export function Monthly({
         {s.days.length === 0 ? (
           <Empty title="ยังไม่มีข้อมูลรายวันในเดือนนี้" />
         ) : chartType === 'pie' ? (
-          <DonutChart size={240} centerLabel="เหตุการณ์" slices={sumSlices(s.days, ['admittedNew', 'referCount', 'deathCount'])} />
+          <DonutChart size={240} centerLabel="เหตุการณ์" slices={sumSlices(s.days, ['admittedNew', 'homeCount', 'wardCount', 'referCount', 'deathCount', 'carryCount'])} />
         ) : (
           <SeriesChart
             mode={chartType}
@@ -171,7 +174,9 @@ export function Monthly({
             series={[
               { key: 'totalInWard', label: 'ผู้ป่วยในวอร์ด', kind: 'line' },
               { key: 'admittedNew', label: 'รับใหม่', kind: 'bar' },
-              { key: 'referCount', label: 'Refer / ย้าย', kind: 'bar' },
+              { key: 'homeCount', label: 'กลับบ้าน', kind: 'bar' },
+              { key: 'wardCount', label: 'ย้ายวอร์ด', kind: 'bar' },
+              { key: 'referCount', label: 'Refer', kind: 'bar' },
               { key: 'deathCount', label: 'เสียชีวิต', kind: 'bar' },
             ]}
             height={300}

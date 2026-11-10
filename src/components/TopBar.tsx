@@ -1,3 +1,4 @@
+import { INDICATORS } from '../lib/constants';
 import {
   Activity,
   CalendarClock,
@@ -47,7 +48,7 @@ const NAV_LINKS: { label: string; view: View; views: View[] }[] = [
 /** เมนูย่อยของแดชบอร์ด */
 export const DASHBOARD_TABS: { value: View; label: string; icon: typeof Activity }[] = [
   { value: 'overview', label: 'ภาพรวม', icon: LayoutGrid },
-  { value: 'indicators', label: '14 ตัวชี้วัด', icon: Activity },
+  { value: 'indicators', label: `${INDICATORS.length} ตัวชี้วัด`, icon: Activity },
   { value: 'stats', label: 'สถิติเตียง', icon: Gauge },
   { value: 'monthly', label: 'รายเดือน', icon: CalendarDays },
 ];

@@ -654,7 +654,7 @@ export const dischargePatient = (
   const bed: Bed = { ...emptyBed(bedNumber), row: prev.row, status: 'cleaning', updatedAt: toLocalDateTime() };
   const beds = putBed(data.beds, bed);
   const inc: Partial<Record<DailyKey, number>> =
-    event === 'expired' ? { deathCount: 1 } : event === 'refer' || event === 'ward' ? { referCount: 1 } : {};
+    OUT_COUNT[event] ? { [OUT_COUNT[event]!]: 1 } : {};
   const day = at.slice(0, 10);
   const sameDay = day === todayKey();
   const today = touchToday(data.daily, beds, sameDay ? inc : {});
@@ -707,7 +707,14 @@ export const caseLogs = (logs: LogEntry[], one: LogEntry) => {
   return candidates.filter((l) => beds.has(l.bedNumber) || (l.event === 'move' && beds.has(moveFrom(l) ?? '')));
 };
 
-const OUT_COUNT: Partial<Record<LogEvent, DailyKey>> = { refer: 'referCount', ward: 'referCount', expired: 'deathCount' };
+/** จำหน่ายแต่ละประเภท → ช่องในแท็บ Daily (แยกกันทุกประเภท) */
+export const OUT_COUNT: Partial<Record<LogEvent, DailyKey>> = {
+  home: 'homeCount',
+  ward: 'wardCount',
+  refer: 'referCount',
+  expired: 'deathCount',
+  carry: 'carryCount',
+};
 
 /**
  * แก้เคสที่จำหน่ายแล้วย้อนหลัง: เวลารับเข้า / เวลาจำหน่าย / หมายเหตุ
@@ -956,6 +963,9 @@ export const monthlySummary = (data: IcuData, ym: string) => {
     logs,
     admissions,
     refers: sum('referCount'),
+    wards: sum('wardCount'),
+    homes: sum('homeCount'),
+    carries: sum('carryCount'),
     deaths: sum('deathCount'),
     discharges: outs.filter((l) => l.event === 'home').length,
     patientDays,
