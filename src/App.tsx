@@ -1,4 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useState, type ReactNode } from 'react';
+import { KeyboardLangGuard } from './components/KeyboardLangGuard';
 import { HomePage } from './components/HomePage';
 import { MenuSheet } from './components/Menu';
 import type { PrintJob } from './components/PrintReport';
@@ -152,6 +153,7 @@ export default function App() {
             </Lazy>
           </div>
           {popup}
+          <KeyboardLangGuard />
         </SyncContext.Provider>
       </StoreContext.Provider>
     );
@@ -243,6 +245,7 @@ export default function App() {
         </Suspense>
       </div>
       {popup}
+          <KeyboardLangGuard />
       <Suspense fallback={null}>
         {printJob && <PrintReport job={printJob} />}
         {pdfJob && <PdfExporter job={pdfJob} onDone={() => setPdfJob(null)} toast={store.toast} />}
