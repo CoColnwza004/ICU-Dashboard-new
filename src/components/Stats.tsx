@@ -5,7 +5,7 @@ import { availableMonths, saveStats } from '../lib/logic';
 import { sheetLink } from '../lib/sheetApi';
 import { autoStatsInput, computeStats, dischargeBreakdown, findStats, fmtStat, STAT_DEFS, type StatsInput } from '../lib/stats';
 import { useStore } from '../lib/store';
-import { Button, cx, Empty, PageHero } from './ui';
+import { Button, cx, Empty, PageHero, selectAll, toWhole } from './ui';
 import { Ring } from './viz';
 
 const FIELDS: { key: keyof StatsInput; label: string; hint: string; icon: ReactNode }[] = [
@@ -134,11 +134,12 @@ export function Stats({
                   )}
                 </span>
                 <input
-                  type="number"
+                  type="text"
                   inputMode="numeric"
-                  min={0}
-                  value={draft[f.key]}
-                  onChange={(e) => set(f.key, e.target.value)}
+                  pattern="[0-9]*"
+                  value={String(draft[f.key])}
+                  {...selectAll}
+                  onChange={(e) => set(f.key, String(toWhole(e.target.value)))}
                   className="num mt-1.5 w-full bg-transparent text-[28px] font-semibold text-ink focus:outline-none"
                 />
                 <span className="block text-[11px] text-ink-3">{f.hint}</span>

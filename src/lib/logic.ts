@@ -170,13 +170,22 @@ export const normalizeDaily = (r: Raw): DailyRecord => ({
   row: typeof r.row === 'number' ? r.row : undefined,
 });
 
+/** เวลาในทะเบียนเป็น yyyy-MM-ddTHH:mm:ss เสมอ (รองรับรูปแบบ d/M/yyyy, HH:mm:ss ที่ชีตอาจแสดง) */
+const logStamp = (v: unknown) => {
+  const t = str(v);
+  const m = t.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4}),?\s+(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+  if (!m) return t;
+  const p = (x: string) => x.padStart(2, '0');
+  return `${m[3]}-${p(m[2])}-${p(m[1])}T${p(m[4])}:${m[5]}:${m[6] ?? '00'}`;
+};
+
 export const normalizeLog = (r: Raw): LogEntry => ({
-  timestamp: str(r.timestamp),
+  timestamp: logStamp(r.timestamp),
   event: EVENT_ALIASES[str(r.event).toLowerCase()] ?? 'admit',
   bedNumber: str(r.bedNumber),
   caseCode: str(r.caseCode),
   acuity: str(r.acuity),
-  admittedAt: str(r.admittedAt),
+  admittedAt: logStamp(r.admittedAt),
   note: str(r.note),
   row: typeof r.row === 'number' ? r.row : undefined,
 });
@@ -231,6 +240,61 @@ export const normalizeRoster = (r: Raw): RosterRow => {
 };
 
 const byOrder = (a: Staff, b: Staff) => a.order - b.order || a.id.localeCompare(b.id);
+
+/** ยอดรับ-จำหน่ายรายวันที่นับจากทะเบียน */
+export const FLOW_KEYS: DailyKey[] = ['admittedNew', 'homeCount', 'wardCount', 'referCount', 'deathCount', 'carryCount'];
+const FLOW_OF: Partial<Record<LogEvent, DailyKey>> = {
+  admit: 'admittedNew',
+  home: 'homeCount',
+  ward: 'wardCount',
+  refer: 'referCount',
+  expired: 'deathCount',
+  carry: 'carryCount',
+};
+/** เดือนที่มีทะเบียนรับ-จำหน่าย → ยอดรับ-จำหน่ายของเดือนนั้นนับจากทะเบียนทั้งหมด */
+export const registerMonths = (logs: LogEntry[]) =>
+  new Set(logs.map((l) => logTime(l.timestamp).slice(0, 7)).filter((m) => /^\d{4}-\d{2}$/.test(m)));
+
+/**
+ * ให้ยอดรับใหม่ / กลับบ้าน / ย้ายวอร์ด / Refer / เสียชีวิต / ยกยอด ในบันทึกรายวันตรงกับทะเบียนเสมอ
+ * (เดือนที่ยังไม่มีทะเบียน เช่น ข้อมูลเก่าที่กรอกเอง → ใช้ค่าในบันทึกรายวันตามเดิม)
+ * คืนข้อมูลที่ปรับแล้ว + รายการวันที่ต่างจากชีต (ใช้เขียนกลับให้ชีตตรงกัน)
+ */
+export const syncFlowFromLogs = (data: IcuData) => {
+  const months = registerMonths(data.logs);
+  if (!months.size) return { data, patches: [] as SheetOp[] };
+  const counts = new Map<string, Partial<Record<DailyKey, number>>>();
+  data.logs.forEach((l) => {
+    const key = FLOW_OF[l.event];
+    if (!key) return;
+    const day = logTime(l.timestamp).slice(0, 10);
+    const c = counts.get(day) ?? {};
+    c[key] = (c[key] ?? 0) + 1;
+    counts.set(day, c);
+  });
+  const patches: SheetOp[] = [];
+  const byDate = new Map(data.daily.map((d) => [d.date, d]));
+  const dates = new Set([...data.daily.map((d) => d.date), ...counts.keys()]);
+  const daily: DailyRecord[] = [];
+  [...dates].sort().forEach((date) => {
+    const cur = byDate.get(date);
+    if (!months.has(date.slice(0, 7))) {
+      if (cur) daily.push(cur);
+      return;
+    }
+    const c = counts.get(date) ?? {};
+    const base = cur ?? emptyDaily(date);
+    const patch: Partial<DailyRecord> = {};
+    FLOW_KEYS.forEach((k) => {
+      const v = c[k] ?? 0;
+      if (base[k] !== v) patch[k] = v;
+    });
+    if (!cur && !Object.keys(patch).length) return;
+    daily.push({ ...base, ...patch });
+    if (Object.keys(patch).length) patches.push({ type: 'upsertDaily', record: { date, ...patch } });
+  });
+  return { data: { ...data, daily }, patches };
+};
 
 export const normalizeData = (raw: {
   beds?: Raw[];

@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { IcuData, SheetMeta, SheetOp, SyncState } from '../types';
-import { initialData, normalizeData, upgradeLocalData, type ActionResult } from './logic';
+import { initialData, normalizeData, syncFlowFromLogs, upgradeLocalData, type ActionResult } from './logic';
 import { DEFAULT_SHEETS_API_URL, LEGACY_SHEETS_API_URLS } from '../config';
 import { ApiError, changePin as apiChangePin, fetchSnapshot, postOps, verifyPin, type SheetConfig, type Snapshot } from './sheetApi';
 
@@ -136,6 +136,10 @@ export function useIcuStore() {
   const inFlight = useRef(false);
   const lastPrint = useRef('');
   const lastTeam = useRef('');
+  /** ยอดรับ-จำหน่ายรายวันที่ต่างจากทะเบียน → เขียนกลับชีตครั้งเดียวต่อชุด (กันวนซ้ำถ้าสคริปต์เก่าเก็บไม่ได้) */
+  const flowPatches = useRef<SheetOp[]>([]);
+  const flowSent = useRef('');
+  const [flowTick, setFlowTick] = useState(0);
   const pollCount = useRef(0);
   const queue = useRef<Promise<void>>(Promise.resolve());
 
@@ -185,7 +189,10 @@ export function useIcuStore() {
     if (print !== lastPrint.current || teamChanged) {
       lastPrint.current = print;
       if (team !== null) lastTeam.current = team;
-      const next = normalizeData(snap);
+      const synced = syncFlowFromLogs(normalizeData(snap));
+      const next = synced.data;
+      flowPatches.current = synced.patches;
+      if (synced.patches.length) setFlowTick((n) => n + 1);
       // รอบที่ไม่ได้ขอข้อมูลบุคลากร (parts=core) ใช้ข้อมูลเดิมต่อ
       if (snap.staff === undefined) {
         const cur = dataRef.current;
@@ -379,6 +386,16 @@ export function useIcuStore() {
   }, [pin, config, applySnapshot, logoutLocal]);
 
   /** ใช้ action แบบ optimistic: อัปเดตหน้าเว็บทันที แล้วเขียนลงชีตตามหลัง */
+  // เจ้าหน้าที่เข้าระบบอยู่ → ทำให้แท็บ Daily ในชีตตรงกับทะเบียน (ยอดรับ-จำหน่าย)
+  useEffect(() => {
+    const ops = flowPatches.current;
+    if (!pin || !ops.length || pending.current > 0) return;
+    const sig = JSON.stringify(ops);
+    if (sig === flowSent.current) return;
+    flowSent.current = sig;
+    void send(ops);
+  }, [flowTick, pin, send]);
+
   const commit = useCallback(
     (fn: (d: IcuData) => ActionResult, okText?: string) => {
       const { next, ops } = fn(dataRef.current);

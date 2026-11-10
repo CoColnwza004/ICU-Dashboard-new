@@ -4,7 +4,7 @@ import type { DailyRecord } from '../types';
 import { INDICATORS, type IndicatorGroup } from '../lib/constants';
 import { fmtDateLong, fmtDateShort, fmtDayMonth, shiftDate, todayKey } from '../lib/date';
 import { INDICATOR_ICON } from '../lib/icons';
-import { countsFromBeds, emptyDaily, findDaily, saveDaily } from '../lib/logic';
+import { countsFromBeds, emptyDaily, findDaily, FLOW_KEYS, registerMonths, saveDaily } from '../lib/logic';
 import { sheetLink } from '../lib/sheetApi';
 import { useStore } from '../lib/store';
 import { sumSlices } from '../lib/breakdowns';
@@ -119,6 +119,7 @@ export function Indicators({
   );
 
   const shown = editing ? draft : record;
+  const fromLog = registerMonths(data.logs).has(date.slice(0, 7));
 
   return (
     <div className="space-y-14 sm:space-y-16">
@@ -227,6 +228,8 @@ export function Indicators({
                   const Icon = INDICATOR_ICON[i.key];
                   const prev = findDaily(data.daily, shiftDate(date, -1));
                   const diff = prev ? shown[i.key] - prev[i.key] : null;
+                  // เดือนที่มีทะเบียน: ยอดรับ-จำหน่ายนับจากทะเบียนอัตโนมัติ (แก้ที่ทะเบียนหน้ารายเดือน)
+                  const fromRegister = FLOW_KEYS.includes(i.key) && fromLog;
                   return (
                     <div key={i.key} className="well min-w-0 p-4">
                       <div className="flex items-center justify-between gap-2">
@@ -236,7 +239,7 @@ export function Indicators({
                         <span className="num text-[11px] text-ink-3">#{i.no}</span>
                       </div>
                       <p className="mt-3 truncate text-[13px] font-medium text-ink-2">{i.label}</p>
-                      {editing ? (
+                      {editing && !fromRegister ? (
                         <div className="mt-2">
                           <Stepper label={i.label} value={draft[i.key]} onChange={(v) => setDraft((d) => ({ ...d, [i.key]: v }))} />
                         </div>
@@ -250,7 +253,7 @@ export function Indicators({
                           )}
                         </p>
                       )}
-                      <p className="truncate text-[12px] text-ink-3">{i.th}</p>
+                      <p className="truncate text-[12px] text-ink-3">{fromRegister && editing ? 'นับจากทะเบียนรับ-จำหน่าย' : i.th}</p>
                     </div>
                   );
                 })}

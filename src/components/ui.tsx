@@ -222,6 +222,25 @@ export function Switch({
 
 /* ------------------------------------------------------------------ */
 
+/** ตัวเลขจำนวนเต็มจากช่องกรอก: ตัดเลข 0 นำหน้าและตัวอักษรอื่นทิ้ง ("05" → 5, "" → 0) */
+export const toWhole = (raw: string) => Number.parseInt(raw.replace(/\D/g, ''), 10) || 0;
+/**
+ * แตะช่องตัวเลข → เลือกทั้งหมด พิมพ์ทับได้ทันที ไม่ต้องลบ 0 ก่อน
+ * ใช้: <input {...selectAll} /> (กันคลิกแรกยกเลิกการเลือกด้วย)
+ */
+export const selectAll = {
+  onFocus: (e: { currentTarget: HTMLInputElement }) => {
+    e.currentTarget.select();
+    e.currentTarget.dataset.justFocused = '1';
+  },
+  onMouseUp: (e: { currentTarget: HTMLInputElement; preventDefault: () => void }) => {
+    if (e.currentTarget.dataset.justFocused) {
+      e.preventDefault();
+      delete e.currentTarget.dataset.justFocused;
+    }
+  },
+};
+
 export function Stepper({
   value,
   onChange,
@@ -249,12 +268,12 @@ export function Stepper({
       </button>
       <input
         aria-label={label}
-        type="number"
+        type="text"
         inputMode="numeric"
-        value={value}
-        min={min}
-        max={max}
-        onChange={(e) => onChange(clamp(Number.parseInt(e.target.value, 10) || 0))}
+        pattern="[0-9]*"
+        value={String(value)}
+        {...selectAll}
+        onChange={(e) => onChange(clamp(toWhole(e.target.value)))}
         className="num w-10 bg-transparent text-center text-[17px] font-semibold text-ink focus:outline-none"
       />
       <button

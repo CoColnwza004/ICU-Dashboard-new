@@ -7,7 +7,7 @@ import { sheetLink } from '../lib/sheetApi';
 import { useStore } from '../lib/store';
 import { Avatar } from './Avatar';
 import { OrgChart, useActiveStaff, useTodayDuty } from './OrgChart';
-import { Button, cx, Empty, Modal, PageHero, Segmented, Switch } from './ui';
+import { Button, cx, Empty, Modal, PageHero, Segmented, Switch, selectAll, toWhole } from './ui';
 
 export const STAFF_GROUPS: StaffGroup[] = ['แพทย์', 'พยาบาล', 'ผู้ช่วยพยาบาล', 'พนักงานช่วยเหลือคนไข้', 'อื่นๆ'];
 
@@ -427,10 +427,13 @@ function StaffPanel({
           </Field>
           <Field label="ลำดับการแสดง">
             <input
-              type="number"
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
               className="field"
-              value={form.order}
-              onChange={(e) => set('order', Number(e.target.value) || 0)}
+              value={String(form.order)}
+              {...selectAll}
+              onChange={(e) => set('order', toWhole(e.target.value))}
             />
           </Field>
         </div>
