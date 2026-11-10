@@ -11,6 +11,7 @@ export const FLOW_ITEMS = [
   { key: 'ward', label: 'ย้ายวอร์ด', tone: '#6250d6' },
   { key: 'refer', label: 'Refer', tone: '#eb6834' },
   { key: 'expired', label: 'เสียชีวิต', tone: 'var(--color-ink-2)' },
+  { key: 'carry', label: 'ยกยอดเดือนถัดไป', tone: '#0a84a8' },
 ] as const;
 
 export const useFlow = () => {
@@ -28,22 +29,30 @@ export function FlowTiles({ size = 'page' }: { size?: 'page' | 'wall' }) {
   const wall = size === 'wall';
   return (
     <div>
-      <div className={cx('grid gap-2', wall ? 'grid-cols-3 gap-[0.8vmin] sm:grid-cols-5' : 'grid-cols-2 sm:grid-cols-5 sm:gap-3')}>
-        {FLOW_ITEMS.map((f, i) => {
+      <div className={cx('grid gap-2', wall ? 'grid-cols-3 gap-[0.8vmin]' : 'grid-cols-3 sm:grid-cols-6 sm:gap-3')}>
+        {FLOW_ITEMS.map((f) => {
           const Icon = EVENT_ICON[f.key];
           return (
             <div
               key={f.key}
-              className={cx('well min-w-0', wall ? 'px-[1vmin] py-[0.9vmin]' : 'px-4 py-3', !wall && i === 0 && 'col-span-2 sm:col-span-1')}
+              className={cx('well min-w-0', wall ? 'px-[1vmin] py-[0.8vmin]' : 'px-4 py-3')}
             >
               <p className={cx('flex items-center gap-1.5 truncate font-medium text-ink-2', wall ? 'text-[clamp(10px,1.25vmin,17px)]' : 'text-[13px]')}>
                 <Icon className="size-[1.15em] shrink-0" style={{ color: f.tone }} strokeWidth={2} />
                 {f.label}
               </p>
-              <p className={cx('num leading-tight font-semibold', wall ? 'mt-[0.3vmin] text-[clamp(20px,3.4vmin,48px)]' : 'mt-1 text-[32px]')}>
-                {today[f.key]}
-              </p>
-              <p className={cx('num truncate text-ink-3', wall ? 'text-[clamp(9px,1.1vmin,15px)]' : 'text-[12px]')}>เดือนนี้ {month[f.key]}</p>
+              {wall ? (
+                // จอแสดงผล: ตัวเลขกับ “เดือนนี้” อยู่บรรทัดเดียวกัน ประหยัดความสูง
+                <p className="mt-[0.2vmin] flex items-baseline justify-between gap-1">
+                  <span className="num text-[clamp(18px,3vmin,44px)] leading-none font-semibold">{today[f.key]}</span>
+                  <span className="num truncate text-[clamp(9px,1.1vmin,15px)] text-ink-3">เดือนนี้ {month[f.key]}</span>
+                </p>
+              ) : (
+                <>
+                  <p className="num mt-1 text-[32px] leading-tight font-semibold">{today[f.key]}</p>
+                  <p className="num truncate text-[12px] text-ink-3">เดือนนี้ {month[f.key]}</p>
+                </>
+              )}
             </div>
           );
         })}
@@ -51,7 +60,7 @@ export function FlowTiles({ size = 'page' }: { size?: 'page' | 'wall' }) {
       <p className={cx('num text-ink-3', wall ? 'mt-[0.8vmin] text-[clamp(10px,1.2vmin,16px)]' : 'mt-3 text-[13px]')}>
         จำหน่ายรวม วันนี้ <span className="font-semibold text-ink">{today.out}</span> ราย · เดือนนี้{' '}
         <span className="font-semibold text-ink">{month.out}</span> ราย
-        {!wall && <span className="ml-1">(กลับบ้าน + ย้ายวอร์ด + Refer + เสียชีวิต · จากทะเบียนรับ-จำหน่าย)</span>}
+        {!wall && <span className="ml-1">(กลับบ้าน + ย้ายวอร์ด + Refer + เสียชีวิต + ยกยอดเดือนถัดไป · จากทะเบียนรับ-จำหน่าย)</span>}
       </p>
     </div>
   );

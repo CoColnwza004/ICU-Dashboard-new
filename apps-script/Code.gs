@@ -177,7 +177,7 @@ const DATE_ONLY = { date: true, effectiveDate: true, reviewDate: true };
 
 const STATUS_TH = { available: 'ว่าง', occupied: 'มีผู้ป่วย', cleaning: 'ทำความสะอาด' };
 const EVENT_TH = {
-  admit: 'รับเข้า', home: 'จำหน่ายกลับบ้าน', ward: 'ย้ายวอร์ด', refer: 'ส่งต่อ (Refer)', expired: 'เสียชีวิต', move: 'ย้ายเตียง',
+  admit: 'รับเข้า', home: 'จำหน่ายกลับบ้าน', ward: 'ย้ายวอร์ด', refer: 'ส่งต่อ (Refer)', expired: 'เสียชีวิต', carry: 'ยกยอดเดือนถัดไป', move: 'ย้ายเตียง',
 };
 const DATETIME_FIELDS = { admittedAt: true, updatedAt: true, timestamp: true, savedAt: true };
 

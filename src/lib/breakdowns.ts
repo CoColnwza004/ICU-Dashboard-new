@@ -5,7 +5,7 @@ import { ACUITIES, ACUITY_COLOR, EVENT_META, INDICATOR_BY_KEY, STATUS_META } fro
 /** ข้อมูลสำหรับแผนภูมิวงกลม (สัดส่วน) */
 
 export const dischargeSlices = (logs: LogEntry[]): Slice[] =>
-  (['home', 'ward', 'refer', 'expired'] as const).map((e) => ({
+  (['home', 'ward', 'refer', 'expired', 'carry'] as const).map((e) => ({
     key: e,
     label: EVENT_META[e].label,
     value: logs.filter((l) => l.event === e).length,

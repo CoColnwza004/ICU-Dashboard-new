@@ -132,6 +132,9 @@ const EVENT_ALIASES: Record<string, LogEvent> = {
   ส่งต่อ: 'refer',
   expired: 'expired',
   เสียชีวิต: 'expired',
+  carry: 'carry',
+  ยกยอด: 'carry',
+  ยกยอดเดือนถัดไป: 'carry',
   move: 'move',
   ย้ายเตียง: 'move',
 };
@@ -1003,21 +1006,21 @@ export const bedsAt = (data: IcuData, end: string): Bed[] => {
 
 /** ยอดรับ-จำหน่ายจากทะเบียน (Log) ในช่วงเวลา [start, end) · เวลาเป็นข้อความ 'yyyy-MM-ddTHH:mm' */
 export const flowBetween = (data: IcuData, start: string, end: string) => {
-  const c = { admit: 0, home: 0, ward: 0, refer: 0, expired: 0 };
+  const c = { admit: 0, home: 0, ward: 0, refer: 0, expired: 0, carry: 0 };
   data.logs.forEach((l) => {
     const t = l.timestamp.replace(' ', 'T');
     if (t >= start && t < end && l.event in c) c[l.event as keyof typeof c] += 1;
   });
-  return { ...c, out: c.home + c.ward + c.refer + c.expired };
+  return { ...c, out: c.home + c.ward + c.refer + c.expired + c.carry };
 };
 
 /** ยอดรับ-จำหน่ายจากทะเบียน (Log) · prefix = 'yyyy-MM-dd' (วัน) หรือ 'yyyy-MM' (เดือน) */
 export const flowCounts = (data: IcuData, prefix: string) => {
-  const c = { admit: 0, home: 0, ward: 0, refer: 0, expired: 0 };
+  const c = { admit: 0, home: 0, ward: 0, refer: 0, expired: 0, carry: 0 };
   data.logs.forEach((l) => {
     if (l.timestamp.startsWith(prefix) && l.event in c) c[l.event as keyof typeof c] += 1;
   });
-  return { ...c, out: c.home + c.ward + c.refer + c.expired };
+  return { ...c, out: c.home + c.ward + c.refer + c.expired + c.carry };
 };
 
 export const availableMonths = (data: IcuData) => {

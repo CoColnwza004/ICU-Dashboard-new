@@ -9,7 +9,7 @@ import { useStore } from '../lib/store';
 import type { Acuity, DeviceKey, IcuData, LogEntry, OutEvent } from '../types';
 import { admitAcuitySlices, dischargeSlices, sumSlices } from '../lib/breakdowns';
 import { CHART_TYPES, DonutChart, SeriesChart, type ChartType } from './charts';
-import { Button, cx, Dot, Empty, Modal, PageHero, Segmented, Switch } from './ui';
+import { Button, ChoicePills, cx, Dot, Empty, Modal, PageHero, Segmented, Switch } from './ui';
 
 type Filter = 'all' | 'in' | 'out';
 
@@ -492,6 +492,7 @@ const OUT_TYPES: { value: OutEvent; label: string }[] = [
   { value: 'ward', label: 'ย้ายวอร์ด' },
   { value: 'refer', label: 'Refer' },
   { value: 'expired', label: 'เสียชีวิต' },
+  { value: 'carry', label: 'ยกยอดเดือนถัดไป' },
 ];
 
 /** เคสที่ลืมกดทั้งรับเข้าและจำหน่าย (ผู้ป่วยออกไปแล้ว) → เพิ่มลงทะเบียน + ยอดรายวันย้อนหลัง */
@@ -611,7 +612,7 @@ function AddPastCaseDialog({ open, onClose }: { open: boolean; onClose: () => vo
             <input type="datetime-local" className="field" value={outAt} min={inAt || undefined} max={now} onChange={(e) => setOutAt(e.target.value)} />
           </label>
         </div>
-        <Segmented options={OUT_TYPES} value={event} onChange={setEvent} label="ประเภทการจำหน่าย" />
+        <ChoicePills options={OUT_TYPES} value={event} onChange={setEvent} label="ประเภทการจำหน่าย" />
         <label className="block">
           <span className="mb-1.5 block text-[12px] text-ink-2">หมายเหตุ / ปลายทาง</span>
           <textarea

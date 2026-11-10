@@ -94,6 +94,7 @@ export const EVENT_META: Record<LogEvent, { label: string; out: boolean }> = {
   ward: { label: 'ย้ายวอร์ด', out: true },
   refer: { label: 'ส่งต่อ (Refer)', out: true },
   expired: { label: 'เสียชีวิต', out: true },
+  carry: { label: 'ยกยอดเดือนถัดไป', out: true },
   move: { label: 'ย้ายเตียง', out: false },
 };
 

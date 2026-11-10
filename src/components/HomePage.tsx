@@ -308,7 +308,7 @@ function LivePills({ onGo }: { onGo: (v: View) => void }) {
   );
 }
 
-const FLOW_DARK: Record<string, string> = { admit: '#2997ff', home: '#30d158', ward: '#bf5af2', refer: '#ff9f0a', expired: '#a1a1a6' };
+const FLOW_DARK: Record<string, string> = { admit: '#2997ff', home: '#30d158', ward: '#bf5af2', refer: '#ff9f0a', expired: '#a1a1a6', carry: '#64d2ff' };
 
 /** ยอดรับ-จำหน่ายวันนี้ (กลับบ้าน / ย้ายวอร์ด / Refer / เสียชีวิต) */
 function FlowRow() {
@@ -316,7 +316,7 @@ function FlowRow() {
   return (
     <div className="mx-auto mt-12 max-w-[820px]">
       <p className="text-[14px] text-[#86868b]">รับ-จำหน่ายวันนี้</p>
-      <div className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-5 sm:gap-3">
+      <div className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-6 sm:gap-3">
         {FLOW_ITEMS.map((f) => (
           <div key={f.key} className="rounded-[18px] bg-[#161617] px-3 py-3 shadow-[inset_0_0_0_1px_rgb(255_255_255/0.06)]">
             <p className="apple-headline num text-[30px] sm:text-[36px]" style={{ color: FLOW_DARK[f.key] }}>

@@ -118,6 +118,7 @@ const FLOW_ROWS = [
   { key: 'ward', label: 'ย้ายวอร์ด', tone: '#6250d6' },
   { key: 'refer', label: 'Refer', tone: '#eb6834' },
   { key: 'expired', label: 'เสียชีวิต', tone: '#48484a' },
+  { key: 'carry', label: 'ยกยอดเดือนถัดไป', tone: '#0a84a8' },
 ] as const;
 
 export function ShiftReport({ src }: { src: ReportSource }) {

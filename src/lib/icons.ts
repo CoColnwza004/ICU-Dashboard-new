@@ -7,6 +7,7 @@ import {
 
   Droplet,
   Flame,
+  Forward,
   HeartCrack,
   HeartPulse,
   House,
@@ -58,6 +59,7 @@ export const EVENT_ICON: Record<LogEvent, LucideIcon> = {
   ward: ArrowRightLeft,
   refer: Ambulance,
   expired: HeartCrack,
+  carry: Forward,
   move: ArrowLeftRight,
 };
 

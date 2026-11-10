@@ -66,6 +66,39 @@ export function IconButton({
 
 /* ------------------------------------------------------------------ */
 
+/** ตัวเลือกแบบเม็ดยาที่ขึ้นบรรทัดใหม่ได้ (ใช้แทน Segmented เมื่อตัวเลือกยาว/หลายตัวบนมือถือ) */
+export function ChoicePills<T extends string>({
+  options,
+  value,
+  onChange,
+  label,
+}: {
+  options: { value: T; label: ReactNode }[];
+  value: T;
+  onChange: (v: T) => void;
+  label: string;
+}) {
+  return (
+    <div role="tablist" aria-label={label} className="flex flex-wrap gap-2">
+      {options.map((o) => (
+        <button
+          key={o.value}
+          type="button"
+          role="tab"
+          aria-selected={o.value === value}
+          onClick={() => onChange(o.value)}
+          className={cx(
+            'h-10 rounded-full px-4 text-[14px] font-medium transition-colors',
+            o.value === value ? 'btn-ink' : 'btn-glass text-ink-2 hover:text-ink',
+          )}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export function Segmented<T extends string>({
   options,
   value,

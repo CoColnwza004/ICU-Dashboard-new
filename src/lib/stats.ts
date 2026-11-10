@@ -100,12 +100,13 @@ export const daysForMonth = (ym: string) => {
 /** ค่าที่คำนวณจากข้อมูลในระบบ (แท็บ Daily + Log) ใช้เติมฟอร์มอัตโนมัติ */
 export const autoStatsInput = (data: IcuData, ym: string): StatsInput => {
   const days = data.daily.filter((d) => d.date.startsWith(ym));
-  const homes = data.logs.filter((l) => l.event === 'home' && l.timestamp.startsWith(ym)).length;
+  // กลับบ้าน + ยกยอดเดือนถัดไป นับจากทะเบียน (ไม่มีช่องในแท็บ Daily)
+  const homes = data.logs.filter((l) => (l.event === 'home' || l.event === 'carry') && l.timestamp.startsWith(ym)).length;
   return {
     beds: data.beds.length,
     days: daysForMonth(ym),
     patientDays: days.reduce((s, d) => s + d.totalInWard, 0),
-    // จำหน่าย = Refer + ย้ายวอร์ด (นับรวมใน Refer ของแท็บ Daily) + เสียชีวิต + กลับบ้าน (จากทะเบียน)
+    // จำหน่าย = Refer + ย้ายวอร์ด (นับรวมใน Refer ของแท็บ Daily) + เสียชีวิต + กลับบ้าน + ยกยอดเดือนถัดไป (จากทะเบียน)
     discharges: days.reduce((s, d) => s + d.referCount + d.deathCount, 0) + homes,
   };
 };

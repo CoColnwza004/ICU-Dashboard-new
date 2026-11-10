@@ -21,7 +21,7 @@ import {
   type PatientInput,
 } from '../lib/logic';
 import { useStore } from '../lib/store';
-import { Button, cx, Dot, Modal, Segmented, Switch } from './ui';
+import { Button, ChoicePills, cx, Dot, Modal, Segmented, Switch } from './ui';
 
 type Mode = 'admit' | 'edit';
 type Pane = 'form' | 'out' | 'move' | 'cancel';
@@ -31,6 +31,7 @@ const OUT_OPTIONS: { value: OutEvent; label: string }[] = [
   { value: 'ward', label: 'ย้ายวอร์ด' },
   { value: 'refer', label: 'Refer' },
   { value: 'expired', label: 'เสียชีวิต' },
+  { value: 'carry', label: 'ยกยอดเดือนถัดไป' },
 ];
 
 const nextCaseCode = (beds: Bed[], bedNumber: string) => {
@@ -285,7 +286,7 @@ export function BedPanel({ bedNumber, onClose }: { bedNumber: string | null; onC
               เตียงจะเปลี่ยนเป็น “ทำความสะอาด” และบันทึกลงทะเบียน (แท็บ Log) อัตโนมัติ
             </span>
           </p>
-          <Segmented options={OUT_OPTIONS} value={outEvent} onChange={setOutEvent} label="ประเภทการจำหน่าย" />
+          <ChoicePills options={OUT_OPTIONS} value={outEvent} onChange={setOutEvent} label="ประเภทการจำหน่าย" />
           <Field label="วันเวลาที่จำหน่าย">
             <div className="flex gap-2">
               <input
