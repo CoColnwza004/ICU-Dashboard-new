@@ -59,6 +59,9 @@ export type LogEvent = 'admit' | 'home' | 'ward' | 'refer' | 'expired' | 'carry'
 /** เหตุการณ์ที่ผู้ป่วยออกจาก ICU */
 export type OutEvent = 'home' | 'ward' | 'refer' | 'expired' | 'carry';
 
+/** ช่องในทะเบียนที่แก้ย้อนหลังได้ */
+export type LogPatch = Partial<Pick<LogEntry, 'timestamp' | 'admittedAt' | 'note' | 'event' | 'bedNumber' | 'caseCode' | 'acuity'>>;
+
 export interface LogEntry {
   timestamp: string;
   event: LogEvent;
@@ -255,7 +258,7 @@ export type SheetOp =
   | { type: 'uploadPhoto'; staffId: string; dataUrl: string }
   | { type: 'deleteStaff'; id: string; fromMonth: string }
   | { type: 'deleteLog'; rows: { row: number; caseCode: string; bedNumber: string }[] }
-  | { type: 'updateLog'; row: number; caseCode: string; bedNumber: string; patch: { timestamp?: string; admittedAt?: string; note?: string } }
+  | { type: 'updateLog'; row: number; caseCode: string; bedNumber: string; patch: LogPatch }
   | { type: 'upsertDoc'; doc: Partial<Omit<Doc, 'row' | 'active' | 'updatedAt'>> & { id: string; status?: 'ใช้งาน' | 'ยกเลิก' } }
   | { type: 'uploadDoc'; docId: string; name: string; dataUrl: string }
   | { type: 'upsertNews'; news: Partial<Omit<News, 'row' | 'published' | 'updatedAt'>> & { id: string; status?: 'เผยแพร่' | 'ซ่อน' } }

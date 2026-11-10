@@ -693,7 +693,7 @@ function upsertDaily_(record) {
   if (last > 2) sh.getRange(2, 1, last - 1, DAILY_COLS.length).sort({ column: 1, ascending: true });
 }
 
-/** แก้รายการในทะเบียนย้อนหลัง (เวลา / หมายเหตุ) · ตรวจรหัสเคสและเตียงก่อน กันแก้ผิดแถว */
+/** แก้รายการในทะเบียนย้อนหลัง (เวลา / หมายเหตุ / ประเภทจำหน่าย / เตียง / รหัสเคส / ระดับความรุนแรง) · ตรวจรหัสเคสและเตียงก่อน กันแก้ผิดแถว */
 function updateLog_(row, caseCode, bedNumber, patch) {
   const sh = SpreadsheetApp.getActive().getSheetByName(TAB.log);
   const r = Number(row);
@@ -703,9 +703,10 @@ function updateLog_(row, caseCode, bedNumber, patch) {
   if (!same('caseCode', caseCode) || !same('bedNumber', bedNumber)) {
     throw new Error('รายการในทะเบียนถูกแก้ไขในชีต กรุณารีเฟรชแล้วลองใหม่');
   }
-  ['timestamp', 'admittedAt', 'note'].forEach(function (c) {
+  ['timestamp', 'admittedAt', 'note', 'event', 'bedNumber', 'caseCode', 'acuity'].forEach(function (c) {
     if (patch && Object.prototype.hasOwnProperty.call(patch, c)) {
-      sh.getRange(r, LOG_COLS.indexOf(c) + 1).setValue(toCell_(c, patch[c]));
+      const v = c === 'event' ? (EVENT_TH[patch[c]] || patch[c]) : patch[c];
+      sh.getRange(r, LOG_COLS.indexOf(c) + 1).setValue(toCell_(c, v));
     }
   });
 }

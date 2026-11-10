@@ -13,6 +13,7 @@ import type {
   IcuData,
   LogEntry,
   LogEvent,
+  LogPatch,
   OutEvent,
   SheetOp,
 } from '../types';
@@ -784,10 +785,32 @@ export const OUT_COUNT: Partial<Record<LogEvent, DailyKey>> = {
  * แก้เคสที่จำหน่ายแล้วย้อนหลัง: เวลารับเข้า / เวลาจำหน่าย / หมายเหตุ
  * อัปเดตทุกแถวของเคสในทะเบียน และย้ายยอดรายวัน (รับใหม่ / Refer / เสียชีวิต) ไปวันที่ถูกต้อง
  */
-export const editCase = (data: IcuData, out: LogEntry, next: { admittedAt: string; outAt: string; note: string }): ActionResult => {
+/** หมายเหตุในทะเบียน → ช่องแยก (รองรับหมายเหตุแบบข้อความธรรมดาด้วย) */
+export const splitOutNote = (note: string): OutDetail => {
+  const d = parseOutNote(note);
+  return Object.values(d).some(Boolean) ? d : note.trim() ? { note: note.trim() } : {};
+};
+
+export interface CaseEdit {
+  admittedAt: string;
+  outAt: string;
+  note: string;
+  event?: OutEvent;
+  caseCode?: string;
+  acuity?: Acuity | '';
+  /** เปลี่ยนเตียงได้เฉพาะเคสที่ไม่ได้ย้ายเตียงระหว่างนอน */
+  bedNumber?: string;
+}
+
+/**
+ * แก้รายละเอียดเคสที่จำหน่ายแล้ว: เวลา · ประเภทจำหน่าย · รหัสเคส · ระดับความรุนแรง · เตียง · หมายเหตุ/ปลายทาง
+ * อัปเดตทุกแถวของเคสในทะเบียน และย้ายยอดรายวันไปวัน/ประเภทที่ถูกต้อง
+ */
+export const editCase = (data: IcuData, out: LogEntry, next: CaseEdit): ActionResult => {
   const oldIn = logTime(out.admittedAt);
   const oldOut = logTime(out.timestamp);
   const related = caseLogs(data.logs, out);
+  const canMoveBed = !related.some((l) => l.event === 'move');
   const ops: SheetOp[] = [];
   const logs = data.logs.map((l) => {
     if (!related.includes(l)) return l;
@@ -798,28 +821,37 @@ export const editCase = (data: IcuData, out: LogEntry, next: { admittedAt: strin
       admittedAt: next.admittedAt,
       timestamp: isOut ? next.outAt : isAdmit ? next.admittedAt : l.timestamp,
       note: isOut ? next.note : l.note,
+      event: isOut && next.event ? next.event : l.event,
+      caseCode: next.caseCode !== undefined ? next.caseCode.trim() : l.caseCode,
+      acuity: next.acuity !== undefined ? next.acuity : l.acuity,
+      bedNumber: next.bedNumber && canMoveBed ? next.bedNumber : l.bedNumber,
     };
-    const patch: { timestamp?: string; admittedAt?: string; note?: string } = {};
+    const patch: LogPatch = {};
     if (logTime(l.admittedAt) !== next.admittedAt) patch.admittedAt = next.admittedAt;
     if (logTime(l.timestamp) !== logTime(upd.timestamp)) patch.timestamp = upd.timestamp;
     if (isOut && l.note !== next.note) patch.note = next.note;
+    if (upd.event !== l.event) patch.event = upd.event;
+    if (upd.caseCode !== l.caseCode) patch.caseCode = upd.caseCode;
+    if (upd.acuity !== l.acuity) patch.acuity = upd.acuity;
+    if (upd.bedNumber !== l.bedNumber) patch.bedNumber = upd.bedNumber;
     if (Object.keys(patch).length && l.row) ops.push({ type: 'updateLog', row: l.row, caseCode: l.caseCode, bedNumber: l.bedNumber, patch });
     return Object.keys(patch).length ? upd : l;
   });
-  // ยอดรายวันที่ต้องย้ายวัน
+  // ยอดรายวันที่ต้องย้ายวัน / ย้ายประเภท
   const delta: DailyDelta = new Map();
-  const move = (key: DailyKey, from: string, to: string) => {
-    if (from === to) return;
-    addDelta(delta, from, key, -1);
-    addDelta(delta, to, key, 1);
-  };
-  if (related.some((l) => l.event === 'admit')) move('admittedNew', oldIn.slice(0, 10), next.admittedAt.slice(0, 10));
-  const outKey = OUT_COUNT[out.event];
-  if (outKey) move(outKey, oldOut.slice(0, 10), next.outAt.slice(0, 10));
+  if (related.some((l) => l.event === 'admit') && oldIn.slice(0, 10) !== next.admittedAt.slice(0, 10)) {
+    addDelta(delta, oldIn.slice(0, 10), 'admittedNew', -1);
+    addDelta(delta, next.admittedAt.slice(0, 10), 'admittedNew', 1);
+  }
+  const fromKey = OUT_COUNT[out.event];
+  const toKey = OUT_COUNT[next.event ?? out.event];
+  if (fromKey !== toKey || oldOut.slice(0, 10) !== next.outAt.slice(0, 10)) {
+    if (fromKey) addDelta(delta, oldOut.slice(0, 10), fromKey, -1);
+    if (toKey) addDelta(delta, next.outAt.slice(0, 10), toKey, 1);
+  }
   const moved = applyDelta(data.daily, delta);
   ops.push(...moved.ops);
-  const daily = moved.daily;
-  return { next: { ...data, logs, daily }, ops };
+  return { next: { ...data, logs, daily: moved.daily }, ops };
 };
 
 /** ย้ายผู้ป่วยไปเตียงอื่น: ข้อมูลผู้ป่วยตามไปทั้งหมด (วันที่รับเข้าเดิม) เตียงเดิมเปลี่ยนเป็น "ทำความสะอาด" */

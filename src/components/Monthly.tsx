@@ -2,7 +2,21 @@ import { Activity, Download, Printer, Ambulance, ArrowUpRight, BedDouble, Chevro
 import { useEffect, useMemo, useState } from 'react';
 import { ACUITIES, DEVICES, EVENT_META, INDICATORS } from '../lib/constants';
 import { fmtDateLong, fmtDateShort, fmtDateTime, fmtDayMonth, fmtMonth, parseLocalDateTime, toLocalDateTime } from '../lib/date';
-import { addPastCase, availableMonths, backfillInfo, cancelAdmission, caseLogs, deleteCase, editCase, logTime, monthlySummary, stayDays } from '../lib/logic';
+import {
+  addPastCase,
+  availableMonths,
+  backfillInfo,
+  cancelAdmission,
+  caseLogs,
+  composeOutNote,
+  deleteCase,
+  editCase,
+  logTime,
+  monthlySummary,
+  splitOutNote,
+  stayDays,
+  type OutDetail,
+} from '../lib/logic';
 import { sheetLink } from '../lib/sheetApi';
 import { fmtStat, STAT_DEFS, statsFor } from '../lib/stats';
 import { useStore } from '../lib/store';
@@ -349,8 +363,13 @@ function EditCaseDialog({ entry, onClose }: { entry: LogEntry | null; onClose: (
   const { data, commit } = useStore();
   const [inAt, setInAt] = useState('');
   const [outAt, setOutAt] = useState('');
-  const [note, setNote] = useState('');
+  const [detail, setDetail] = useState<OutDetail>({});
+  const [event, setEvent] = useState<OutEvent>('home');
+  const [code, setCode] = useState('');
+  const [acuity, setAcuity] = useState<Acuity | ''>('');
+  const [bedNo, setBedNo] = useState('');
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const setD = (k: keyof OutDetail, v: string) => setDetail((d) => ({ ...d, [k]: v }));
   const [reverseCensus, setReverseCensus] = useState(false);
   const related = useMemo(() => (entry ? caseLogs(data.logs, entry) : []), [data.logs, entry]);
   const info = useMemo(() => backfillInfo(related), [related]);
@@ -358,7 +377,11 @@ function EditCaseDialog({ entry, onClose }: { entry: LogEntry | null; onClose: (
     if (!entry) return;
     setInAt(logTime(entry.admittedAt));
     setOutAt(logTime(entry.timestamp));
-    setNote(entry.note);
+    setDetail(splitOutNote(entry.note));
+    if (EVENT_META[entry.event].out) setEvent(entry.event as OutEvent);
+    setCode(entry.caseCode);
+    setAcuity((ACUITIES as string[]).includes(entry.acuity) ? (entry.acuity as Acuity) : '');
+    setBedNo(entry.bedNumber);
     setConfirmDelete(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [entry]);
@@ -398,12 +421,28 @@ function EditCaseDialog({ entry, onClose }: { entry: LogEntry | null; onClose: (
   const a = parseLocalDateTime(inAt);
   const b = parseLocalDateTime(outAt);
   const los = a && b && b >= a ? (b.getTime() - a.getTime()) / 86_400_000 : null;
-  const changed = !!entry && (inAt !== logTime(entry.admittedAt) || outAt !== logTime(entry.timestamp) || note !== entry.note);
+  // ปลายทางเก็บตามประเภท: Refer = รพ. + ตึก · ย้ายวอร์ด = ตึก · อื่น ๆ = หมายเหตุ
+  const note = composeOutNote(
+    event === 'refer' ? detail : event === 'ward' ? { unit: detail.unit, info: detail.info, note: detail.note } : { info: detail.info, note: detail.note },
+  );
+  const movedBeds = related.some((l) => l.event === 'move');
+  const changed =
+    !!entry &&
+    (inAt !== logTime(entry.admittedAt) ||
+      outAt !== logTime(entry.timestamp) ||
+      note !== entry.note ||
+      event !== entry.event ||
+      code.trim() !== entry.caseCode ||
+      acuity !== entry.acuity ||
+      bedNo !== entry.bedNumber);
   const unsynced = !!entry && related.some((l) => l.row === undefined);
 
   const save = () => {
     if (!entry || error || !changed) return;
-    void commit((d) => editCase(d, entry, { admittedAt: inAt, outAt, note }), `แก้ไขเคส ${entry.caseCode || entry.bedNumber} แล้ว`);
+    void commit(
+      (d) => editCase(d, entry, { admittedAt: inAt, outAt, note, event, caseCode: code, acuity, bedNumber: movedBeds ? undefined : bedNo }),
+      `แก้ไขเคส ${code.trim() || entry.bedNumber} แล้ว`,
+    );
     onClose();
   };
 
@@ -451,9 +490,9 @@ function EditCaseDialog({ entry, onClose }: { entry: LogEntry | null; onClose: (
           </p>
           <ul className="well space-y-1 px-4 py-3 text-[14px] text-ink-2">
             {related.some((l) => l.event === 'admit') && <li>· รับใหม่ −1 ในวันที่ {fmtDateTime(entry.admittedAt).split(' ').slice(0, 2).join(' ')}</li>}
-            {(entry.event === 'refer' || entry.event === 'ward' || entry.event === 'expired') && (
+            {EVENT_META[entry.event].out && (
               <li>
-                · {entry.event === 'expired' ? 'เสียชีวิต' : 'Refer / ย้ายวอร์ด'} −1 ในวันที่ {fmtDateTime(entry.timestamp).split(' ').slice(0, 2).join(' ')}
+                · {EVENT_META[entry.event].label} −1 ในวันที่ {fmtDateTime(entry.timestamp).split(' ').slice(0, 2).join(' ')}
               </li>
             )}
           </ul>
@@ -503,14 +542,64 @@ function EditCaseDialog({ entry, onClose }: { entry: LogEntry | null; onClose: (
         <p className={error ? 'text-[13px] text-critical' : 'text-[13px] text-ink-3'}>
           {error || (los !== null ? `นอน ICU ${los.toFixed(1)} วัน` : '')}
         </p>
+        <div className="grid gap-3 sm:grid-cols-3">
+          <label className="block">
+            <span className="mb-1.5 block text-[12px] text-ink-2">รหัสเคส</span>
+            <input className="field" value={code} onChange={(e) => setCode(e.target.value)} />
+          </label>
+          <label className="block">
+            <span className="mb-1.5 block text-[12px] text-ink-2">เตียง</span>
+            <select className="field" value={bedNo} onChange={(e) => setBedNo(e.target.value)} disabled={movedBeds}>
+              {[...new Set([bedNo, ...data.beds.map((b) => b.bedNumber)])].filter(Boolean).map((b) => (
+                <option key={b}>{b}</option>
+              ))}
+            </select>
+            {movedBeds && <span className="mt-1 block text-[11px] text-ink-3">เคสนี้ย้ายเตียงระหว่างนอน แก้เตียงไม่ได้</span>}
+          </label>
+          <label className="block">
+            <span className="mb-1.5 block text-[12px] text-ink-2">ระดับความรุนแรง</span>
+            <select className="field" value={acuity} onChange={(e) => setAcuity(e.target.value as Acuity | '')}>
+              <option value="">ไม่ระบุ</option>
+              {ACUITIES.map((x) => (
+                <option key={x}>{x}</option>
+              ))}
+            </select>
+          </label>
+        </div>
+        <div>
+          <span className="mb-1.5 block text-[12px] text-ink-2">ประเภทการจำหน่าย</span>
+          <ChoicePills options={OUT_TYPES} value={event} onChange={setEvent} label="ประเภทการจำหน่าย" />
+        </div>
+        {event === 'refer' && (
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="block">
+              <span className="mb-1.5 block text-[12px] text-ink-2">โรงพยาบาลปลายทาง</span>
+              <input className="field" value={detail.hospital ?? ''} onChange={(e) => setD('hospital', e.target.value)} />
+            </label>
+            <label className="block">
+              <span className="mb-1.5 block text-[12px] text-ink-2">ตึก / หอผู้ป่วย / แผนก</span>
+              <input className="field" value={detail.unit ?? ''} onChange={(e) => setD('unit', e.target.value)} />
+            </label>
+          </div>
+        )}
+        {event === 'ward' && (
+          <label className="block">
+            <span className="mb-1.5 block text-[12px] text-ink-2">ตึก / หอผู้ป่วยปลายทาง</span>
+            <input className="field" value={detail.unit ?? ''} onChange={(e) => setD('unit', e.target.value)} />
+          </label>
+        )}
         <label className="block">
-          <span className="mb-1.5 block text-[12px] text-ink-2">หมายเหตุ / ปลายทาง</span>
-          <textarea className="field min-h-24" value={note} onChange={(e) => setNote(e.target.value)} placeholder="ไม่ต้องใส่ชื่อหรือ HN ผู้ป่วย" />
+          <span className="mb-1.5 block text-[12px] text-ink-2">ข้อมูลอื่น ๆ</span>
+          <input className="field" value={detail.info ?? ''} onChange={(e) => setD('info', e.target.value)} />
+        </label>
+        <label className="block">
+          <span className="mb-1.5 block text-[12px] text-ink-2">โน้ตเพิ่มเติม</span>
+          <textarea className="field min-h-20" value={detail.note ?? ''} onChange={(e) => setD('note', e.target.value)} placeholder="ไม่ต้องใส่ชื่อหรือ HN ผู้ป่วย" />
         </label>
         <p className="text-[12px] text-ink-3">
           {unsynced
             ? 'รายการนี้ยังไม่ได้บันทึกลงชีต รอสักครู่แล้วลองใหม่'
-            : 'แก้ทุกแถวของเคสนี้ในแท็บ Log และย้ายยอดรับใหม่ / Refer / เสียชีวิตในบันทึกรายวันไปวันที่ถูกต้องให้อัตโนมัติ'}
+            : 'แก้ทุกแถวของเคสนี้ในแท็บ Log · ยอดรับใหม่และยอดจำหน่ายแต่ละประเภทย้ายไปวัน/ประเภทที่ถูกต้องให้อัตโนมัติ'}
         </p>
       </div>
       )}
