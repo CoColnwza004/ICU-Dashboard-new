@@ -368,9 +368,24 @@ export function PrintReport({ job, mode = 'print' }: { job: PrintJob; mode?: 'pr
       ['Ventilator utilization', `${s.ventilatorRate}%`],
       ['ผู้ป่วยสูงสุดต่อวัน', `${s.peak?.totalInWard ?? 0} ราย`],
     ];
-    const per = landscape ? 30 : 46; // แถวทะเบียนต่อหน้า
+    // แบ่งทะเบียนเป็นหน้าตามความสูงโดยประมาณ (หมายเหตุยาวขึ้นบรรทัดใหม่) ให้ทุกหน้าพอดีกระดาษโดยไม่ต้องย่อ
+    const budget = landscape ? 545 : 930; // px ที่ใช้ได้ของตารางต่อหน้า
+    const perLine = landscape ? 78 : 36; // ตัวอักษรต่อบรรทัดในช่องหมายเหตุ
+    const rowH = (note: string) => 21 + 14 * Math.max(0, Math.ceil((note || '—').length / perLine) - 1);
     const chunks: (typeof s.logs)[] = [];
-    for (let i = 0; i < s.logs.length; i += per) chunks.push(s.logs.slice(i, i + per));
+    let cur: typeof s.logs = [];
+    let used = 0;
+    s.logs.forEach((l) => {
+      const h = rowH(l.note);
+      if (cur.length && used + h > budget) {
+        chunks.push(cur);
+        cur = [];
+        used = 0;
+      }
+      cur.push(l);
+      used += h;
+    });
+    if (cur.length) chunks.push(cur);
     const figures = (
       <section className="mb-5 grid grid-cols-3 gap-px overflow-hidden rounded-lg border border-black/15 bg-black/15">
         {figs.map(([l, v]) => (
@@ -397,7 +412,7 @@ export function PrintReport({ job, mode = 'print' }: { job: PrintJob; mode?: 'pr
     );
     const W = landscape ? 1080 : 740;
     // แนวนอนหน้ากระดาษเตี้ยกว่า → แถวชิดขึ้นให้ 31 วันพอดี 1 หน้า
-    const rowCls = landscape ? '!py-px leading-[15px]' : '!py-[3px]';
+    const rowCls = landscape ? '!py-0 leading-[14px]' : '!py-[2px] leading-[15px]';
     return (
       <>
         <Page title="ภาพรวมประจำเดือน" ym={ym}>
@@ -421,11 +436,11 @@ export function PrintReport({ job, mode = 'print' }: { job: PrintJob; mode?: 'pr
         </Page>
         <Page title={`${INDICATORS.length} ตัวชี้วัดรายวัน`} ym={ym}>
           {s.days.length > 0 && (
-            <section className="mb-4">
+            <section className={landscape ? 'mb-2' : 'mb-4'}>
               <h2 className="mb-1 text-[12px] font-semibold">รับเข้า–ออก และผู้ป่วยในวอร์ดรายวัน</h2>
               <SeriesChart
                 printWidth={W}
-                height={landscape ? 110 : 190}
+                height={landscape ? 64 : 120}
                 data={s.days}
                 xKey="date"
                 xFormat={fmtDayMonth}
@@ -491,12 +506,12 @@ export function PrintReport({ job, mode = 'print' }: { job: PrintJob; mode?: 'pr
               <tbody>
                 {rows.map((l, i) => (
                   <tr key={i}>
-                    <td className={`${td} !py-1 whitespace-nowrap`}>{fmtDateTime(l.timestamp)}</td>
-                    <td className={`${td} !py-1 whitespace-nowrap`}>{EVENT_META[l.event].label}</td>
-                    <td className={`${td} !py-1`}>{l.bedNumber}</td>
-                    <td className={`${td} !py-1 whitespace-nowrap`}>{l.caseCode || '—'}</td>
-                    <td className={`${td} !py-1`}>{l.acuity || '—'}</td>
-                    <td className={`${td} !py-1 text-[10px]`}>{l.note || '—'}</td>
+                    <td className={`${td} !py-[3px] whitespace-nowrap`}>{fmtDateTime(l.timestamp)}</td>
+                    <td className={`${td} !py-[3px] whitespace-nowrap`}>{EVENT_META[l.event].label}</td>
+                    <td className={`${td} !py-[3px]`}>{l.bedNumber}</td>
+                    <td className={`${td} !py-[3px] whitespace-nowrap`}>{l.caseCode || '—'}</td>
+                    <td className={`${td} !py-[3px]`}>{l.acuity || '—'}</td>
+                    <td className={`${td} !py-[3px] leading-[14px]`}>{l.note || '—'}</td>
                   </tr>
                 ))}
               </tbody>

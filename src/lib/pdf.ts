@@ -8,7 +8,7 @@ export async function exportPdf(node: HTMLElement, filename: string, landscape =
   await document.fonts.ready;
 
   const scale = 2;
-  // รายงานที่จัดเป็นหน้า ๆ ไว้แล้ว (data-pdf-page): 1 หน้า = กระดาษ 1 แผ่น ย่อให้พอดี ไม่ตัดข้ามหน้า
+  // รายงานที่จัดเป็นหน้า ๆ ไว้แล้ว (data-pdf-page): 1 หน้า = กระดาษ 1 แผ่น ไม่ตัดข้ามหน้า · ตัวอักษรเท่ากันทุกหน้า
   const pageEls = [...node.querySelectorAll<HTMLElement>('[data-pdf-page]')];
   if (pageEls.length) {
     const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: landscape ? 'landscape' : 'portrait', compress: true });
@@ -17,25 +17,26 @@ export async function exportPdf(node: HTMLElement, filename: string, landscape =
     const margin = landscape ? 8 : 10;
     const contentW = pageW - margin * 2;
     const contentH = pageH - margin * 2 - 4;
+    // ภาพทุกหน้าก่อน (หาใหม่ทุกหน้า: ระหว่างสร้าง PDF หน้าเว็บอาจวาดรายงานใหม่ ทำให้องค์ประกอบเดิมหลุด)
+    const shots: HTMLCanvasElement[] = [];
     for (let i = 0; i < pageEls.length; i++) {
-      // หาใหม่ทุกหน้า: ระหว่างสร้าง PDF หน้าเว็บอาจวาดรายงานใหม่ (ข้อมูลอัปเดต) ทำให้องค์ประกอบเดิมหลุดจากหน้า
       const el = node.querySelectorAll<HTMLElement>('[data-pdf-page]')[i] ?? pageEls[i];
       const c = await toCanvas(el, { pixelRatio: scale, backgroundColor: '#ffffff', cacheBust: true });
-      if (!c.width || !c.height) continue;
-      let w = contentW;
-      let h = (c.height / c.width) * w;
-      if (h > contentH) {
-        w *= contentH / h;
-        h = contentH;
-      }
+      if (c.width && c.height) shots.push(c);
+    }
+    // ย่อทุกหน้าด้วยอัตราเดียวกัน (อัตราของหน้าที่ต้องย่อมากที่สุด) → ตัวอักษรขนาดเท่ากันทุกหน้า
+    const k = Math.min(1, ...shots.map((c) => contentH / ((c.height / c.width) * contentW)));
+    shots.forEach((c, i) => {
+      const w = contentW * k;
+      const h = (c.height / c.width) * w;
       if (i > 0) pdf.addPage();
       pdf.addImage(c.toDataURL('image/jpeg', 0.92), 'JPEG', margin + (contentW - w) / 2, margin, w, h);
-    }
+    });
     pdf.setFontSize(8);
     pdf.setTextColor(120);
-    for (let i = 1; i <= pageEls.length; i++) {
+    for (let i = 1; i <= pdf.getNumberOfPages(); i++) {
       pdf.setPage(i);
-      pdf.text(`${i} / ${pageEls.length}`, pageW - margin, pageH - margin + 3, { align: 'right' });
+      pdf.text(`${i} / ${pdf.getNumberOfPages()}`, pageW - margin, pageH - margin + 3, { align: 'right' });
     }
     save(pdf.output('blob'), filename);
     return;
