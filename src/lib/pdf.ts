@@ -8,6 +8,39 @@ export async function exportPdf(node: HTMLElement, filename: string, landscape =
   await document.fonts.ready;
 
   const scale = 2;
+  // รายงานที่จัดเป็นหน้า ๆ ไว้แล้ว (data-pdf-page): 1 หน้า = กระดาษ 1 แผ่น ย่อให้พอดี ไม่ตัดข้ามหน้า
+  const pageEls = [...node.querySelectorAll<HTMLElement>('[data-pdf-page]')];
+  if (pageEls.length) {
+    const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: landscape ? 'landscape' : 'portrait', compress: true });
+    const pageW = landscape ? 297 : 210;
+    const pageH = landscape ? 210 : 297;
+    const margin = landscape ? 8 : 10;
+    const contentW = pageW - margin * 2;
+    const contentH = pageH - margin * 2 - 4;
+    for (let i = 0; i < pageEls.length; i++) {
+      // หาใหม่ทุกหน้า: ระหว่างสร้าง PDF หน้าเว็บอาจวาดรายงานใหม่ (ข้อมูลอัปเดต) ทำให้องค์ประกอบเดิมหลุดจากหน้า
+      const el = node.querySelectorAll<HTMLElement>('[data-pdf-page]')[i] ?? pageEls[i];
+      const c = await toCanvas(el, { pixelRatio: scale, backgroundColor: '#ffffff', cacheBust: true });
+      if (!c.width || !c.height) continue;
+      let w = contentW;
+      let h = (c.height / c.width) * w;
+      if (h > contentH) {
+        w *= contentH / h;
+        h = contentH;
+      }
+      if (i > 0) pdf.addPage();
+      pdf.addImage(c.toDataURL('image/jpeg', 0.92), 'JPEG', margin + (contentW - w) / 2, margin, w, h);
+    }
+    pdf.setFontSize(8);
+    pdf.setTextColor(120);
+    for (let i = 1; i <= pageEls.length; i++) {
+      pdf.setPage(i);
+      pdf.text(`${i} / ${pageEls.length}`, pageW - margin, pageH - margin + 3, { align: 'right' });
+    }
+    save(pdf.output('blob'), filename);
+    return;
+  }
+
   const canvas = await toCanvas(node, { pixelRatio: scale, backgroundColor: '#ffffff', cacheBust: true });
 
   // ตำแหน่งที่ตัดหน้าได้อย่างปลอดภัย (ขอบบน/ล่างของแถวตาราง หัวข้อ และกล่องต่าง ๆ)
@@ -67,7 +100,11 @@ export async function exportPdf(node: HTMLElement, filename: string, landscape =
     pdf.setPage(i);
     pdf.text(`${i} / ${pages}`, pageW - margin, pageH - margin + 2, { align: 'right' });
   }
-  const url = URL.createObjectURL(pdf.output('blob'));
+  save(pdf.output('blob'), filename);
+}
+
+const save = (blob: Blob, filename: string) => {
+  const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
   link.download = filename;
@@ -75,7 +112,7 @@ export async function exportPdf(node: HTMLElement, filename: string, landscape =
   link.click();
   link.remove();
   window.setTimeout(() => URL.revokeObjectURL(url), 30_000);
-}
+};
 
 /** บันทึกเป็นรูปภาพ PNG (ความละเอียด 2 เท่า) */
 export async function exportPng(node: HTMLElement, filename: string) {

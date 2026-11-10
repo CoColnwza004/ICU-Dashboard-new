@@ -10,12 +10,12 @@ import { DonutChart, SeriesChart, type Slice } from './charts';
 
 export type PrintJob =
   | { kind: 'daily'; date: string }
-  | { kind: 'monthly'; ym: string }
+  | { kind: 'monthly'; ym: string; landscape?: boolean }
   | { kind: 'stats'; ym: string }
   | { kind: 'roster'; ym: string };
 
-/** ตารางเวรกว้าง (31 วัน) จึงใช้กระดาษแนวนอน */
-export const isLandscape = (job: PrintJob) => job.kind === 'roster';
+/** ตารางเวรกว้าง (31 วัน) ใช้กระดาษแนวนอนเสมอ · รายงานประจำเดือนเลือกได้ */
+export const isLandscape = (job: PrintJob) => job.kind === 'roster' || (job.kind === 'monthly' && !!job.landscape);
 
 const th = 'border-b border-black/20 py-1.5 pr-2 text-left text-[10px] font-semibold text-black/60';
 const td = 'border-b border-black/10 py-1.5 pr-2 text-[11px]';
@@ -27,7 +27,7 @@ export const pdfFilename = (job: PrintJob) =>
       ? `ICU-bed-stats-${job.ym}.pdf`
       : job.kind === 'roster'
         ? `ICU-roster-${job.ym}.pdf`
-        : `ICU-monthly-report-${job.ym}.pdf`;
+        : `ICU-monthly-report-${job.ym}${job.landscape ? '-landscape' : ''}.pdf`;
 // ชื่อไฟล์เป็นภาษาอังกฤษ: บางเบราว์เซอร์/มือถือไม่รับชื่อไฟล์ภาษาไทยและจะตั้งชื่อเป็น "download"
 
 /** สีตัวอักษรในรายงานเป็นโทนสว่างเสมอ (แม้เครื่องจะใช้โหมดมืด) */
@@ -66,6 +66,7 @@ export function PrintReport({ job, mode = 'print' }: { job: PrintJob; mode?: 'pr
       className={mode === 'print' ? 'print-only text-black' : 'text-black'}
       style={{ fontFamily: 'var(--font-sans)', ...LIGHT_VARS, ...(mode === 'pdf' ? { padding: '4px 2px' } : {}) }}
     >
+      {job.kind !== 'monthly' && (
       <header className="mb-6 flex items-end justify-between border-b border-black pb-3">
         <div>
           <p className="text-[11px] text-black/60">
@@ -76,15 +77,19 @@ export function PrintReport({ job, mode = 'print' }: { job: PrintJob; mode?: 'pr
               ? `รายงานตัวชี้วัดประจำวัน — ${fmtDateLong(job.date)}`
               : job.kind === 'stats'
                 ? `สถิติการใช้เตียง — ${fmtMonth(job.ym)}`
-                : job.kind === 'roster'
-                  ? `ตารางเวร — ${fmtMonth(job.ym)}`
-                  : `รายงานประจำเดือน — ${fmtMonth(job.ym)}`}
+                : `ตารางเวร — ${fmtMonth(job.ym)}`}
           </h1>
         </div>
         <p className="text-[10px] text-black/50">พิมพ์เมื่อ {printed}</p>
       </header>
+      )}
       {job.kind === 'daily' && <Daily date={job.date} />}
-      {job.kind === 'monthly' && <MonthlyBody ym={job.ym} />}
+      {job.kind === 'monthly' && (
+        <>
+          {mode === 'print' && job.landscape && <style>{'@page { size: A4 landscape; margin: 10mm; }'}</style>}
+          <MonthlyPages ym={job.ym} landscape={!!job.landscape} />
+        </>
+      )}
       {job.kind === 'roster' && (
         <>
           {mode === 'print' && <style>{'@page { size: A4 landscape; margin: 10mm; }'}</style>}
@@ -97,9 +102,11 @@ export function PrintReport({ job, mode = 'print' }: { job: PrintJob; mode?: 'pr
           <StatsHistory />
         </>
       )}
-      <footer className="mt-8 border-t border-black/20 pt-2 text-[9px] text-black/50">
-        ข้อมูลไม่ระบุตัวตนผู้ป่วย (Zero-PII) · ICU Dashboard
-      </footer>
+      {job.kind !== 'monthly' && (
+        <footer className="mt-8 border-t border-black/20 pt-2 text-[9px] text-black/50">
+          ข้อมูลไม่ระบุตัวตนผู้ป่วย (Zero-PII) · ICU Dashboard
+        </footer>
+      )}
     </div>
   );
 
@@ -343,90 +350,134 @@ export function PrintReport({ job, mode = 'print' }: { job: PrintJob; mode?: 'pr
     );
   }
 
-  function MonthlyBody({ ym }: { ym: string }) {
+  /**
+   * รายงานประจำเดือนแบบหน้าละหมวด (ข้อมูลประเภทเดียวกันอยู่หน้าเดียวกัน ไม่ถูกตัดครึ่ง)
+   * 1) ภาพรวม: ยอดรับ-จำหน่าย · สถิติเตียง · สัดส่วน  2) ตัวชี้วัดรายวัน: กราฟ + ตาราง  3) ทะเบียนเข้า–ออก (ยาว → แบ่งหน้าพร้อมหัวตาราง)
+   * แต่ละหน้า (data-pdf-page) ถูกย่อให้พอดีกระดาษ 1 แผ่นตอนบันทึก PDF
+   */
+  function MonthlyPages({ ym, landscape }: { ym: string; landscape: boolean }) {
     const s = monthlySummary(data, ym);
-    const figs = [
+    const figs: [string, string][] = [
       ['รับใหม่', `${s.admissions} ราย`],
-      ['Refer / ย้ายวอร์ด', `${s.refers} ราย`],
+      ['กลับบ้าน', `${s.homes} ราย`],
+      ['ย้ายวอร์ด', `${s.wards} ราย`],
+      ['Refer', `${s.refers} ราย`],
       ['เสียชีวิต', `${s.deaths} ราย`],
+      ['ยกยอดเดือนถัดไป', `${s.carries} ราย`],
       ['Ventilator-days', `${s.ventilatorDays} วัน`],
       ['Ventilator utilization', `${s.ventilatorRate}%`],
       ['ผู้ป่วยสูงสุดต่อวัน', `${s.peak?.totalInWard ?? 0} ราย`],
     ];
+    const per = landscape ? 30 : 46; // แถวทะเบียนต่อหน้า
+    const chunks: (typeof s.logs)[] = [];
+    for (let i = 0; i < s.logs.length; i += per) chunks.push(s.logs.slice(i, i + per));
+    const figures = (
+      <section className="mb-5 grid grid-cols-3 gap-px overflow-hidden rounded-lg border border-black/15 bg-black/15">
+        {figs.map(([l, v]) => (
+          <div key={l} className="bg-white px-3 py-2">
+            <p className="text-[10px] text-black/60">{l}</p>
+            <p className="text-[19px] leading-tight font-semibold">{v}</p>
+          </div>
+        ))}
+      </section>
+    );
+    const pies = (
+      <PieRow
+        items={[
+          { title: 'ประเภทการจำหน่าย', slices: dischargeSlices(s.logs), center: 'จำหน่าย' },
+          { title: 'ความรุนแรงเมื่อรับเข้า', slices: admitAcuitySlices(s.logs), center: 'รับเข้า' },
+          {
+            title: 'อุปกรณ์ (ผู้ป่วย-วัน)',
+            slices: sumSlices(s.days, ['ventilatorCount', 'highFlowCount', 'cannulaCount', 'cLineCount', 'foleyCount', 'ivHlCount']),
+            unit: 'ผู้ป่วย-วัน',
+            center: 'ผู้ป่วย-วัน',
+          },
+        ]}
+      />
+    );
+    const W = landscape ? 1080 : 740;
+    // แนวนอนหน้ากระดาษเตี้ยกว่า → แถวชิดขึ้นให้ 31 วันพอดี 1 หน้า
+    const rowCls = landscape ? '!py-px leading-[15px]' : '!py-[3px]';
     return (
       <>
-        <section className="mb-6 grid grid-cols-3 gap-px overflow-hidden rounded-lg border border-black/15 bg-black/15">
-          {figs.map(([l, v]) => (
-            <div key={l} className="bg-white p-3">
-              <p className="text-[10px] text-black/60">{l}</p>
-              <p className="text-[22px] font-semibold">{v}</p>
+        <Page title="ภาพรวมประจำเดือน" ym={ym}>
+          {landscape ? (
+            <div className="grid grid-cols-[1fr_1.05fr] gap-5">
+              <div>
+                {figures}
+                <h2 className="mb-2 text-[13px] font-semibold">สัดส่วน</h2>
+                {pies}
+              </div>
+              <StatsBlock ym={ym} />
             </div>
-          ))}
-        </section>
-        <StatsBlock ym={ym} />
-        <h2 className="mb-2 text-[13px] font-semibold">สัดส่วน</h2>
-        <PieRow
-          items={[
-            { title: 'ประเภทการจำหน่าย', slices: dischargeSlices(s.logs), center: 'จำหน่าย' },
-            { title: 'ความรุนแรงเมื่อรับเข้า', slices: admitAcuitySlices(s.logs), center: 'รับเข้า' },
-            {
-              title: 'อุปกรณ์ (ผู้ป่วย-วัน)',
-              slices: sumSlices(s.days, ['ventilatorCount', 'cLineCount', 'foleyCount', 'ivHlCount']),
-              unit: 'ผู้ป่วย-วัน',
-              center: 'ผู้ป่วย-วัน',
-            },
-          ]}
-        />
-        {s.days.length > 0 && (
-          <section className="mb-6 break-inside-avoid">
-            <h2 className="mb-2 text-[13px] font-semibold">รับเข้า–ออก และผู้ป่วยในวอร์ดรายวัน</h2>
-            <SeriesChart
-              printWidth={680}
-              height={200}
-              data={s.days}
-              xKey="date"
-              xFormat={fmtDayMonth}
-              series={[
-                { key: 'totalInWard', label: 'ผู้ป่วยในวอร์ด', kind: 'line' },
-                { key: 'admittedNew', label: 'รับใหม่', kind: 'bar' },
-                { key: 'homeCount', label: 'กลับบ้าน', kind: 'bar' },
-                { key: 'wardCount', label: 'ย้ายวอร์ด', kind: 'bar' },
-                { key: 'referCount', label: 'Refer', kind: 'bar' },
-                { key: 'deathCount', label: 'เสียชีวิต', kind: 'bar' },
-              ]}
-            />
-          </section>
-        )}
-        <section className="mb-6">
-          <h2 className="mb-2 text-[13px] font-semibold">{INDICATORS.length} ตัวชี้วัดรายวัน</h2>
-          <table className="w-full">
-            <thead>
-              <tr>
-                <th className={th}>วันที่</th>
-                {INDICATORS.map((i) => (
-                  <th key={i.key} className={`${th} text-right`}>
-                    {i.label}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {s.days.map((d) => (
-                <tr key={d.date}>
-                  <td className={td}>{fmtDateShort(d.date)}</td>
+          ) : (
+            <>
+              {figures}
+              <StatsBlock ym={ym} />
+              <h2 className="mb-2 text-[13px] font-semibold">สัดส่วน</h2>
+              {pies}
+            </>
+          )}
+        </Page>
+        <Page title={`${INDICATORS.length} ตัวชี้วัดรายวัน`} ym={ym}>
+          {s.days.length > 0 && (
+            <section className="mb-4">
+              <h2 className="mb-1 text-[12px] font-semibold">รับเข้า–ออก และผู้ป่วยในวอร์ดรายวัน</h2>
+              <SeriesChart
+                printWidth={W}
+                height={landscape ? 110 : 190}
+                data={s.days}
+                xKey="date"
+                xFormat={fmtDayMonth}
+                series={[
+                  { key: 'totalInWard', label: 'ผู้ป่วยในวอร์ด', kind: 'line' },
+                  { key: 'admittedNew', label: 'รับใหม่', kind: 'bar' },
+                  { key: 'homeCount', label: 'กลับบ้าน', kind: 'bar' },
+                  { key: 'wardCount', label: 'ย้ายวอร์ด', kind: 'bar' },
+                  { key: 'referCount', label: 'Refer', kind: 'bar' },
+                  { key: 'deathCount', label: 'เสียชีวิต', kind: 'bar' },
+                  { key: 'carryCount', label: 'ยกยอด', kind: 'bar' },
+                ]}
+              />
+            </section>
+          )}
+          <section>
+            <table className="w-full table-fixed">
+              <thead>
+                <tr>
+                  <th className={`${th} w-[52px]`}>วันที่</th>
                   {INDICATORS.map((i) => (
-                    <td key={i.key} className={`${td} text-right`}>
-                      {d[i.key]}
+                    <th key={i.key} className={`${th} pr-1 text-right align-bottom leading-tight !text-[9px]`}>
+                      {i.label}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {s.days.map((d) => (
+                  <tr key={d.date}>
+                    <td className={`${td} ${rowCls} whitespace-nowrap`}>{fmtDateShort(d.date)}</td>
+                    {INDICATORS.map((i) => (
+                      <td key={i.key} className={`${td} ${rowCls} pr-1 text-right`}>
+                        {d[i.key] || <span className="text-black/30">0</span>}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+                <tr>
+                  <td className={`${td} font-semibold`}>รวม</td>
+                  {INDICATORS.map((i) => (
+                    <td key={i.key} className={`${td} pr-1 text-right font-semibold`}>
+                      {s.days.reduce((a, d) => a + d[i.key], 0)}
                     </td>
                   ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </section>
-        {s.logs.length > 0 && (
-          <section>
-            <h2 className="mb-2 text-[13px] font-semibold">ทะเบียนผู้ป่วยเข้า–ออก</h2>
+              </tbody>
+            </table>
+          </section>
+        </Page>
+        {chunks.map((rows, ci) => (
+          <Page key={ci} title={`ทะเบียนผู้ป่วยเข้า–ออก${chunks.length > 1 ? ` (${ci + 1}/${chunks.length})` : ''}`} ym={ym}>
             <table className="w-full">
               <thead>
                 <tr>
@@ -438,21 +489,43 @@ export function PrintReport({ job, mode = 'print' }: { job: PrintJob; mode?: 'pr
                 </tr>
               </thead>
               <tbody>
-                {s.logs.map((l, i) => (
+                {rows.map((l, i) => (
                   <tr key={i}>
-                    <td className={td}>{fmtDateTime(l.timestamp)}</td>
-                    <td className={td}>{EVENT_META[l.event].label}</td>
-                    <td className={td}>{l.bedNumber}</td>
-                    <td className={td}>{l.caseCode || '—'}</td>
-                    <td className={td}>{l.acuity || '—'}</td>
-                    <td className={td}>{l.note || '—'}</td>
+                    <td className={`${td} !py-1 whitespace-nowrap`}>{fmtDateTime(l.timestamp)}</td>
+                    <td className={`${td} !py-1 whitespace-nowrap`}>{EVENT_META[l.event].label}</td>
+                    <td className={`${td} !py-1`}>{l.bedNumber}</td>
+                    <td className={`${td} !py-1 whitespace-nowrap`}>{l.caseCode || '—'}</td>
+                    <td className={`${td} !py-1`}>{l.acuity || '—'}</td>
+                    <td className={`${td} !py-1 text-[10px]`}>{l.note || '—'}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
-          </section>
-        )}
+          </Page>
+        ))}
       </>
     );
   }
+
+  /** 1 หน้ากระดาษ: หัวรายงาน + หมวด · ท้ายหน้า */
+  function Page({ title, ym, children }: { title: string; ym: string; children: React.ReactNode }) {
+    return (
+      <div data-pdf-page className="pdf-page bg-white" style={{ padding: '2px 2px 4px' }}>
+        <header className="mb-4 flex items-end justify-between border-b border-black pb-2">
+          <div>
+            <p className="text-[10px] text-black/60">
+              {HOSPITAL} · {UNIT} · รายงานประจำเดือน {fmtMonth(ym)}
+            </p>
+            <h1 className="text-[19px] leading-tight font-semibold tracking-tight">{title}</h1>
+          </div>
+          <p className="text-[9px] text-black/50">พิมพ์เมื่อ {printed}</p>
+        </header>
+        {children}
+        <footer className="mt-4 border-t border-black/20 pt-1.5 text-[9px] text-black/50">
+          ข้อมูลไม่ระบุตัวตนผู้ป่วย (Zero-PII) · ICU Smart Center
+        </footer>
+      </div>
+    );
+  }
+
 }

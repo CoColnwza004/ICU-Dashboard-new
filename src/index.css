@@ -515,6 +515,14 @@ textarea {
   .print-only {
     display: block !important;
   }
+  /* รายงานแบบหน้าละหมวด: ขึ้นหน้าใหม่ทุกหมวด ไม่ตัดกลางหมวด */
+  .pdf-page {
+    break-after: page;
+    break-inside: avoid;
+  }
+  .pdf-page:last-child {
+    break-after: auto;
+  }
 }
 
 /* ------------------------------------------------------------------ */

@@ -228,8 +228,8 @@ export default function App() {
             )}
             {view === 'monthly' && (
               <Monthly
-                onPrint={(ym) => setPrintJob({ kind: 'monthly', ym })}
-                onPdf={(ym) => setPdfJob({ kind: 'monthly', ym })}
+                onPrint={(ym, landscape) => setPrintJob({ kind: 'monthly', ym, landscape })}
+                onPdf={(ym, landscape) => setPdfJob({ kind: 'monthly', ym, landscape })}
                 pdfBusy={!!pdfJob}
               />
             )}

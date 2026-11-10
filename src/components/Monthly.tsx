@@ -48,13 +48,29 @@ export function Monthly({
   onPdf,
   pdfBusy,
 }: {
-  onPrint: (ym: string) => void;
-  onPdf: (ym: string) => void;
+  onPrint: (ym: string, landscape: boolean) => void;
+  onPdf: (ym: string, landscape: boolean) => void;
   pdfBusy: boolean;
 }) {
   const { data, meta, isStaff } = useStore();
   const [editing, setEditing] = useState<LogEntry | null>(null);
   const [adding, setAdding] = useState(false);
+  // แนวกระดาษของรายงานประจำเดือน (จำไว้ในเครื่อง)
+  const [paper, setPaper] = useState<'portrait' | 'landscape'>(() => {
+    try {
+      return localStorage.getItem('icu.monthly.paper.v1') === 'landscape' ? 'landscape' : 'portrait';
+    } catch {
+      return 'portrait';
+    }
+  });
+  const setPaperPref = (v: 'portrait' | 'landscape') => {
+    setPaper(v);
+    try {
+      localStorage.setItem('icu.monthly.paper.v1', v);
+    } catch {
+      /* ไม่บันทึกก็ได้ */
+    }
+  };
   const months = useMemo(() => availableMonths(data), [data]);
   const [ym, setYm] = useState(months[0]);
   const [filter, setFilter] = useState<Filter>('all');
@@ -111,11 +127,21 @@ export function Monthly({
             <Button variant="secondary" onClick={() => downloadMonthCsv(data, ym)}>
               CSV
             </Button>
-            <Button variant="ghost" onClick={() => onPrint(ym)}>
+            <Segmented<'portrait' | 'landscape'>
+              size="sm"
+              value={paper}
+              onChange={setPaperPref}
+              label="รูปแบบกระดาษ"
+              options={[
+                { value: 'portrait', label: 'แนวตั้ง' },
+                { value: 'landscape', label: 'แนวนอน' },
+              ]}
+            />
+            <Button variant="ghost" onClick={() => onPrint(ym, paper === 'landscape')}>
               <Printer className="size-4" strokeWidth={1.8} />
               พิมพ์
             </Button>
-            <Button variant="primary" onClick={() => onPdf(ym)} disabled={pdfBusy}>
+            <Button variant="primary" onClick={() => onPdf(ym, paper === 'landscape')} disabled={pdfBusy}>
               <Download className="size-4" strokeWidth={1.8} />
               {pdfBusy ? 'กำลังสร้าง PDF…' : 'บันทึก PDF'}
             </Button>
